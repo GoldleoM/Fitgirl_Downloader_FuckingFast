@@ -24,6 +24,8 @@ function apiFetch(path, options = {}) {
 // → const res = await apiFetch(`/api/job_status/${jobId}`);
 // const linkRes = await fetch('/api/download_txt');
 // → const linkRes = await apiFetch('/api/download_txt');
+
+function initApp() {
     const gamesGrid = document.getElementById('gamesGrid');
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
