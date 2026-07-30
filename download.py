@@ -1,8 +1,18 @@
-import os, re, requests, cloudscraper
+import os, re, requests, cloudscraper, argparse, tempfile
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from datetime import datetime
 from colorama import Fore, Style
+
+# --- CLI argument parsing (--temp-dir for Vercel /tmp support) ---
+parser = argparse.ArgumentParser(description="FuckingFast link resolver")
+parser.add_argument('--temp-dir', default=tempfile.gettempdir(),
+                    help='Writable directory for input.txt / download_links.txt (default: system temp)')
+args = parser.parse_args()
+
+TEMP_DIR = args.temp_dir
+INPUT_PATH = os.path.join(TEMP_DIR, 'input.txt')
+OUTPUT_PATH = os.path.join(TEMP_DIR, 'download_links.txt')
 
 
 class console:
@@ -49,7 +59,9 @@ headers = {
 }
 
 # remove processed link
-def remove_link(processed_link, input_file='input.txt'):
+def remove_link(processed_link, input_file=None):
+    if input_file is None:
+        input_file = INPUT_PATH
     try:
         with open(input_file, 'r', encoding="utf-8") as f:
             lines = f.readlines()
@@ -61,15 +73,15 @@ def remove_link(processed_link, input_file='input.txt'):
                 if clean_line != processed_link:
                     f.write(line)
     except Exception as e:
-        log.warning("Could not remove link from input.txt", str(e))
+        log.warning("Could not remove link from input file", str(e))
 
 
 # -------- MAIN --------
 try:
-    with open('input.txt', 'r', encoding="utf-8") as f:
+    with open(INPUT_PATH, 'r', encoding="utf-8") as f:
         lines = f.readlines()
 except FileNotFoundError:
-    log.error("File not found", "input.txt")
+    log.error("File not found", INPUT_PATH)
     lines = []
 
 links = []
@@ -80,8 +92,6 @@ for line in lines:
     if line.startswith("http://") or line.startswith("https://"):
         links.append(line)
 
-
-output_file = "download_links.txt"
 
 scraper = cloudscraper.create_scraper()
 for link in links:
@@ -132,7 +142,7 @@ for link in links:
         script_tags = soup.find_all('script')
         for script in script_tags:
             if script.text and "window.open" in script.text:
-                matches = re.findall(r'window\.open\(["\'](https?://[^\s"\'\)]+)', script.text)
+                matches = re.findall(r'window\.open\(["\']'+"(https?://[^\\s\"'\\)]+)", script.text)
                 if matches:
                     download_url = matches[-1]
                     break
@@ -144,10 +154,10 @@ for link in links:
     log.success("Found download URL", download_url)
 
     # write to file
-    with open(output_file, "a", encoding="utf-8") as f:
+    with open(OUTPUT_PATH, "a", encoding="utf-8") as f:
         f.write(download_url + "\n")
 
     # remove processed link
     remove_link(link)
 
-log.success("All links saved to", output_file)
+log.success("All links saved to", OUTPUT_PATH)

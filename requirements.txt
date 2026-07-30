@@ -1,3 +1,8 @@
 requests
 beautifulsoup4
 colorama
+cloudscraper
+flask
+flask-cors
+gradio
+gunicorn
