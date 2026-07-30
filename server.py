@@ -222,6 +222,36 @@ def api_start_download():
         'total_parts': len(links)
     })
 
+@app.route('/api/extract_links', methods=['POST'])
+def api_extract_links():
+    """Serverless-compatible: resolve FuckingFast links synchronously in-process.
+    No background threads, no subprocess, no file I/O state."""
+    data = request.json or {}
+    game_title = data.get('game_title', 'Unknown Game')
+    links = data.get('links', [])
+    
+    if not links:
+        game_url = data.get('game_url')
+        if game_url:
+            details = fitgirl_scraper.get_game_details(game_url)
+            if details:
+                links = details.get('fuckingfast_links', [])
+                game_title = details.get('title', game_title)
+    
+    if not links:
+        return jsonify({'success': False, 'error': 'No FuckingFast links found for this game'}), 400
+    
+    result = fdm_bridge.resolve_links_sync(links)
+    
+    return jsonify({
+        'success': result['status'] == 'success',
+        'game_title': game_title,
+        'total_parts': len(links),
+        'extracted_count': result['extracted_count'],
+        'direct_links': result['direct_links'],
+        'logs': result.get('logs', [])
+    })
+
 @app.route('/api/job_status/<job_id>', methods=['GET'])
 def api_job_status(job_id):
     job = jobs.get(job_id)
@@ -281,28 +311,36 @@ def api_job_status(job_id):
 @app.route('/api/download_txt', methods=['GET'])
 def api_download_txt():
     output_file = os.path.join(TMP_DIR, 'download_links.txt')
-    if not os.path.exists(output_file):
-        return jsonify({'success': False, 'error': 'No download_links.txt file exists yet'}), 404
-    return send_from_directory(os.path.dirname(output_file), os.path.basename(output_file), as_attachment=True)
+    if os.path.exists(output_file):
+        return send_from_directory(os.path.dirname(output_file), os.path.basename(output_file), as_attachment=True)
+    # Fallback: return links as JSON for client-side file generation
+    return jsonify({'success': False, 'error': 'No download_links.txt file exists yet. Use /api/extract_links and generate the file client-side.'}), 404
 
 @app.route('/api/copy_clipboard', methods=['POST'])
 def api_copy_clipboard():
+    """Returns links as JSON. Client-side JS handles clipboard via navigator.clipboard."""
     output_file = os.path.join(TMP_DIR, 'download_links.txt')
-    if not os.path.exists(output_file):
-        return jsonify({'success': False, 'error': 'No download_links.txt file exists yet'}), 400
-        
-    try:
-        with open(output_file, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-        if not content:
-            return jsonify({'success': False, 'error': 'download_links.txt is empty'}), 400
-            
-        import subprocess
-        p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, close_fds=True)
-        p.communicate(input=content.encode('utf-8'))
-        return jsonify({'success': True, 'message': 'Copied links to Windows Clipboard'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # Try reading from file first (works for local server + background job flow)
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+            if content:
+                links = [line.strip() for line in content.split('\n') if line.strip()]
+                # Try Windows clipboard (local only, will fail on Vercel)
+                try:
+                    import subprocess
+                    p = subprocess.Popen(['clip'], stdin=subprocess.PIPE, close_fds=True)
+                    p.communicate(input=content.encode('utf-8'))
+                    return jsonify({'success': True, 'message': 'Copied links to Windows Clipboard', 'links': links})
+                except Exception:
+                    # Not on Windows or clip not available (Vercel) — return links for client-side copy
+                    return jsonify({'success': True, 'message': 'Links ready for clipboard', 'links': links})
+        except Exception:
+            pass
+    
+    return jsonify({'success': False, 'error': 'No links available. Extract links first.'}), 400
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7860))

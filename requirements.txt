@@ -4,5 +4,4 @@ colorama
 cloudscraper
 flask
 flask-cors
-gradio
 gunicorn

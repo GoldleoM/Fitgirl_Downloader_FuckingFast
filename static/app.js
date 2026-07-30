@@ -1,36 +1,9 @@
-const API_BASE = "https://fitboy-backend.vercel.app";
+const API_BASE = "http://localhost:7860";
 
-// Updated fetch calls use API_BASE
+// All fetch calls route through API_BASE for CORS-safe cross-origin requests
 function apiFetch(path, options = {}) {
     return fetch(`${API_BASE}${path}`, options);
 }
-
-// Prefix relative /api/ cover URLs with API_BASE so images load from Vercel, not Firebase
-function fixCover(url) {
-    if (!url) return '/static/images/placeholder.svg';
-    if (url.startsWith('/api/')) return `${API_BASE}${url}`;
-    return url;
-}
-
-// Example replacements (original lines replaced below)
-// const res = await fetch('/api/copy_clipboard', { method: 'POST' });
-// → const res = await apiFetch('/api/copy_clipboard', { method: 'POST' });
-// window.open('/api/download_txt', '_blank');
-// → window.open(`${API_BASE}/api/download_txt`, '_blank');
-// const res = await apiFetch(`/api/popular?page=${page}\u0026per_page=16`);
-// → const res = await apiFetch(`/api/popular?page=${page}\u0026per_page=16`);
-// const res = await fetch(`/api/catalog?page=${page}`);
-// → const res = await apiFetch(`/api/catalog?page=${page}`);
-// const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-// → const res = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
-// const res = await fetch(`/api/game?url=${encodeURIComponent(gameUrl)}`);
-// → const res = await apiFetch(`/api/game?url=${encodeURIComponent(gameUrl)}`);
-// const res = await fetch('/api/start_download', { ... });
-// → const res = await apiFetch('/api/start_download', { ... });
-// const res = await fetch(`/api/job_status/${jobId}`);
-// → const res = await apiFetch(`/api/job_status/${jobId}`);
-// const linkRes = await fetch('/api/download_txt');
-// → const linkRes = await apiFetch('/api/download_txt');
 
 function initApp() {
     const gamesGrid = document.getElementById('gamesGrid');
@@ -100,7 +73,7 @@ function initApp() {
         tabBtn.addEventListener('click', () => {
             document.querySelectorAll('.guide-tab').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            
+
             tabBtn.classList.add('active');
             const targetTab = tabBtn.getAttribute('data-tab');
             const contentElem = document.getElementById(`tab-${targetTab}`);
@@ -108,11 +81,41 @@ function initApp() {
         });
     });
 
+    // --- Copy URLs: client-side clipboard via navigator.clipboard ---
     copyClipboardBtn.addEventListener('click', async () => {
+        if (extractedLinksCache && extractedLinksCache.length > 0) {
+            // Use cached links directly — works everywhere including Vercel
+            const linksText = extractedLinksCache.join('\n');
+            try {
+                await navigator.clipboard.writeText(linksText);
+                const origText = copyClipboardBtn.innerHTML;
+                copyClipboardBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                copyClipboardBtn.style.background = 'var(--gradient-purple)';
+                setTimeout(() => {
+                    copyClipboardBtn.innerHTML = origText;
+                    copyClipboardBtn.style.background = '';
+                }, 2500);
+                alert(`📋 ${extractedLinksCache.length} direct URLs copied to Clipboard!\n\nYou can now paste them into FDM, JDownloader 2, IDM, or Motrix.`);
+                return;
+            } catch (clipErr) {
+                // Fallback: try server-side copy (local server only)
+                console.warn('navigator.clipboard failed, trying server fallback:', clipErr);
+            }
+        }
+
+        // Fallback: try server endpoint (works on local server with Windows clip)
         try {
             const res = await apiFetch('/api/copy_clipboard', { method: 'POST' });
             const data = await res.json();
             if (data.success) {
+                // If server returned links, also cache them
+                if (data.links && data.links.length > 0) {
+                    extractedLinksCache = data.links;
+                    // Try client-side clipboard with the returned links
+                    try {
+                        await navigator.clipboard.writeText(data.links.join('\n'));
+                    } catch (_) { /* server already copied via clip */ }
+                }
                 const origText = copyClipboardBtn.innerHTML;
                 copyClipboardBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
                 copyClipboardBtn.style.background = 'var(--gradient-purple)';
@@ -129,8 +132,23 @@ function initApp() {
         }
     });
 
+    // --- Save links.txt: client-side Blob download ---
     downloadTxtBtn.addEventListener('click', () => {
-        window.open(`${API_BASE}/api/download_txt`, '_blank');
+        if (extractedLinksCache && extractedLinksCache.length > 0) {
+            // Generate file client-side from cached links
+            const blob = new Blob([extractedLinksCache.join('\n')], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'download_links.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } else {
+            // Fallback: try server endpoint (local server with file)
+            window.open(`${API_BASE}/api/download_txt`, '_blank');
+        }
     });
 
     browserBatchBtn.addEventListener('click', () => {
@@ -138,26 +156,26 @@ function initApp() {
             alert('No links available to download.');
             return;
         }
-        
+
         const total = extractedLinksCache.length;
         const msg = `Starting download of all ${total} parts directly in your browser.\n\n` +
-                    `IMPORTANT: If Chrome/Edge shows a prompt asking "Allow downloading multiple files?", click ALLOW so all parts download!`;
-                    
+            `IMPORTANT: If Chrome/Edge shows a prompt asking "Allow downloading multiple files?", click ALLOW so all parts download!`;
+
         if (confirm(msg)) {
             const origText = browserBatchBtn.innerHTML;
             browserBatchBtn.disabled = true;
-            
+
             extractedLinksCache.forEach((link, idx) => {
                 setTimeout(() => {
                     browserBatchBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Downloading (${idx + 1}/${total})...`;
-                    
+
                     const iframe = document.createElement('iframe');
                     iframe.style.display = 'none';
                     iframe.src = link;
                     document.body.appendChild(iframe);
-                    
+
                     setTimeout(() => {
-                        try { document.body.removeChild(iframe); } catch(e) {}
+                        try { document.body.removeChild(iframe); } catch (e) { }
                     }, 45000);
 
                     if (idx === total - 1) {
@@ -333,7 +351,7 @@ function initApp() {
 
         gamesGrid.innerHTML = games.map(game => `
             <div class="game-card" data-url="${game.url}">
-                <img class="card-poster" src="${fixCover(game.cover)}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                <img class="card-poster" src="${game.cover || '/static/images/placeholder.svg'}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                 <div class="card-content">
                     <h3 class="card-title">${game.title}</h3>
                     <span class="card-date">${game.date || 'FitGirl Repack'}</span>
@@ -373,7 +391,7 @@ function initApp() {
                 modalBody.innerHTML = `
                     <div class="modal-detail-grid">
                         <div>
-                            <img class="modal-poster" src="${fixCover(g.cover)}" alt="${g.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                            <img class="modal-poster" src="${g.cover || '/static/images/placeholder.svg'}" alt="${g.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                         </div>
                         <div class="modal-info">
                             <h2>${g.title}</h2>
@@ -382,9 +400,9 @@ function initApp() {
                                 <span class="tag-badge"><i class="fa-solid fa-layer-group"></i> ${g.parts_count} FuckingFast Parts</span>
                             </div>
                             <ul class="features-list">
-                                ${g.features && g.features.length > 0 
-                                    ? g.features.map(f => `<li>${f}</li>`).join('') 
-                                    : '<li>Verified lossless FitGirl Repack</li><li>Fast installation and MD5 integrity verification</li>'}
+                                ${g.features && g.features.length > 0
+                        ? g.features.map(f => `<li>${f}</li>`).join('')
+                        : '<li>Verified lossless FitGirl Repack</li><li>Fast installation and MD5 integrity verification</li>'}
                             </ul>
 
                             <div class="modal-actions-row">
@@ -416,22 +434,23 @@ function initApp() {
         gameModal.classList.add('hidden');
         downloadDrawer.classList.remove('hidden');
         drawerGameTitle.innerText = title;
-        drawerStatusText.innerText = "Initializing pipeline...";
-        
+        drawerStatusText.innerText = "Extracting direct download links...";
+
         const total = links ? links.length : 0;
         progressBar.style.width = "0%";
         progressCounter.innerText = `0 / ${total} Parts Extracted`;
         progressPercentBadge.innerText = "0%";
-        currentPartText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing extraction pipeline...`;
-        terminalLogs.innerHTML = `<div class="log-line text-muted">> Initializing extraction process...</div>`;
-        
+        currentPartText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Resolving FuckingFast links (this may take a minute)...`;
+        terminalLogs.innerHTML = `<div class="log-line text-muted">> Sending ${total} links to extraction API...</div>`;
+
         copyClipboardBtn.disabled = true;
         downloadTxtBtn.disabled = true;
         browserBatchBtn.disabled = true;
         extractedLinksCache = [];
 
         try {
-            const res = await apiFetch('/api/start_download', {
+            // Use the synchronous /api/extract_links endpoint (Vercel-compatible)
+            const res = await apiFetch('/api/extract_links', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -441,98 +460,55 @@ function initApp() {
                 })
             });
             const data = await res.json();
-            if (data.success) {
-                currentJobId = data.job_id;
-                startPollingStatus(currentJobId);
+
+            if (data.success || (data.direct_links && data.direct_links.length > 0)) {
+                const extCount = data.extracted_count || data.direct_links.length;
+                extractedLinksCache = data.direct_links;
+
+                // Update UI to completed state
+                drawerStatusText.innerText = `Completed! ${extCount} direct links ready.`;
+                progressBar.style.width = "100%";
+                progressPercentBadge.innerText = "100%";
+                progressCounter.innerText = `${extCount} / ${total} Parts Extracted`;
+                currentPartText.innerHTML = `<i class="fa-solid fa-check" style="color: #00ff87;"></i> All ${extCount} parts successfully extracted!`;
+
+                // Render logs
+                if (data.logs && data.logs.length > 0) {
+                    terminalLogs.innerHTML = data.logs.map(l => {
+                        const isSucc = l.includes('Extracted part') || l.includes('✔') || l.includes('Pipeline finished');
+                        return `<div class="log-line ${isSucc ? 'succ' : ''}">${l}</div>`;
+                    }).join('');
+                }
+
+                copyClipboardBtn.disabled = false;
+                downloadTxtBtn.disabled = false;
+                browserBatchBtn.disabled = false;
+
+                // Auto-copy to clipboard
+                try {
+                    await navigator.clipboard.writeText(extractedLinksCache.join('\n'));
+                    terminalLogs.innerHTML += `<div class="log-line succ">> 📋 All ${extCount} direct links automatically copied to Clipboard!</div>`;
+                    terminalLogs.innerHTML += `<div class="log-line" style="color: #00f2fe;">> 💡 Use FDM, JDownloader 2, IDM, or click "Save links.txt" / "Download in Browser"</div>`;
+                } catch (clipErr) {
+                    terminalLogs.innerHTML += `<div class="log-line">> Links ready. Click "Copy URLs" to copy to clipboard.</div>`;
+                }
+
+                terminalLogs.scrollTop = terminalLogs.scrollHeight;
             } else {
-                drawerStatusText.innerText = "Failed: " + data.error;
-                terminalLogs.innerHTML += `<div class="log-line" style="color: red;">Error: ${data.error}</div>`;
+                drawerStatusText.innerText = "Extraction failed: " + (data.error || 'Unknown error');
+                currentPartText.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: red;"></i> ${data.error || 'Could not extract download links.'}`;
+
+                if (data.logs && data.logs.length > 0) {
+                    terminalLogs.innerHTML = data.logs.map(l =>
+                        `<div class="log-line">${l}</div>`
+                    ).join('');
+                }
             }
         } catch (e) {
-            drawerStatusText.innerText = "Error starting process";
+            drawerStatusText.innerText = "Network error during extraction";
+            currentPartText.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: red;"></i> Request failed. Check your connection and try again.`;
+            terminalLogs.innerHTML += `<div class="log-line" style="color: red;">> Error: ${e.message}</div>`;
         }
-    }
-
-    function startPollingStatus(jobId) {
-        if (pollInterval) clearInterval(pollInterval);
-        
-        pollInterval = setInterval(async () => {
-            try {
-                const res = await apiFetch(`/api/job_status/${jobId}`);
-                const data = await res.json();
-                if (data.success) {
-                    // Update live stats & progress bar
-                    const total = data.total_parts || 0;
-                    const count = data.processed_count || 0;
-                    const percent = data.progress_percent || 0;
-                    
-                    progressCounter.innerText = `${count} / ${total} Parts Extracted`;
-                    progressPercentBadge.innerText = `${percent}%`;
-                    progressBar.style.width = `${percent}%`;
-
-                    if (data.current_part_name) {
-                        currentPartText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Resolving: ${data.current_part_name}`;
-                    }
-
-                    // Update clean activity logs
-                    if (data.logs && data.logs.length > 0) {
-                        terminalLogs.innerHTML = data.logs.map(l => {
-                            const isSucc = l.includes('Extracted part') || l.includes('✔') || l.includes('copied');
-                            return `<div class="log-line ${isSucc ? 'succ' : ''}">${l}</div>`;
-                        }).join('');
-                        terminalLogs.scrollTop = terminalLogs.scrollHeight;
-                    }
-
-                    if (data.status === 'running') {
-                        drawerStatusText.innerText = `Extracting direct links... (${count} of ${total} completed)`;
-                    } else if (data.status === 'completed') {
-                        clearInterval(pollInterval);
-                        const extCount = (data.result && data.result.extracted_count) || count;
-                        drawerStatusText.innerText = `Completed! ${extCount} direct links ready.`;
-                        progressBar.style.width = "100%";
-                        progressPercentBadge.innerText = "100%";
-                        progressCounter.innerText = `${extCount} / ${total || extCount} Parts Extracted`;
-                        currentPartText.innerHTML = `<i class="fa-solid fa-check" style="color: #00ff87;"></i> All ${extCount} parts successfully extracted!`;
-
-                        copyClipboardBtn.disabled = false;
-                        downloadTxtBtn.disabled = false;
-                        browserBatchBtn.disabled = false;
-                        extractedLinksCache = (data.result && data.result.direct_links) || [];
-
-                        if (data.result && data.result.clipboard_copied) {
-                            terminalLogs.innerHTML += `<div class="log-line succ">> 📋 All direct links automatically copied to Clipboard!</div>`;
-                            terminalLogs.innerHTML += `<div class="log-line" style="color: #00f2fe;">> 💡 Use FDM, JDownloader 2, IDM, or click "Save links.txt" / "Download in Browser"</div>`;
-                        }
-                    } else if (data.status === 'failed') {
-                        clearInterval(pollInterval);
-                        drawerStatusText.innerText = "Pipeline execution failed.";
-                        currentPartText.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: red;"></i> Extraction failed. Check server logs.`;
-                    }
-                } else {
-                    // Fallback attempt if job ID was lost during server reload
-                    const linkRes = await apiFetch('/api/download_txt');
-                    if (linkRes.ok) {
-                        const txt = await linkRes.text();
-                        const lines = txt.split('\n').filter(l => l.trim());
-                        if (lines.length > 0) {
-                            clearInterval(pollInterval);
-                            drawerStatusText.innerText = `Completed! ${lines.length} direct links ready.`;
-                            progressBar.style.width = "100%";
-                            progressPercentBadge.innerText = "100%";
-                            progressCounter.innerText = `${lines.length} / ${lines.length} Parts Extracted`;
-                            currentPartText.innerHTML = `<i class="fa-solid fa-check" style="color: #00ff87;"></i> All ${lines.length} parts extracted successfully!`;
-                            copyClipboardBtn.disabled = false;
-                            downloadTxtBtn.disabled = false;
-                            browserBatchBtn.disabled = false;
-                            extractedLinksCache = lines;
-                            terminalLogs.innerHTML += `<div class="log-line succ">> 📋 All ${lines.length} direct links ready and saved to download_links.txt</div>`;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Polling error", e);
-            }
-        }, 1000);
     }
 
     // Trigger initial load after all functions are defined
