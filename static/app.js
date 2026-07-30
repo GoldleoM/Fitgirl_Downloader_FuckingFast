@@ -1,4 +1,4 @@
-const API_BASE = "https://fitboy-backend-kdxwm2e1k-goldleoms-projects.vercel.app";
+const API_BASE = "https://fitboy-backend.vercel.app";
 
 // Updated fetch calls use API_BASE
 function apiFetch(path, options = {}) {
