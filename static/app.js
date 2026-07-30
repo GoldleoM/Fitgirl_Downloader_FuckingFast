@@ -5,6 +5,13 @@ function apiFetch(path, options = {}) {
     return fetch(`${API_BASE}${path}`, options);
 }
 
+// Prefix relative /api/ cover URLs with API_BASE so images load from Vercel, not Firebase
+function fixCover(url) {
+    if (!url) return '/static/images/placeholder.svg';
+    if (url.startsWith('/api/')) return `${API_BASE}${url}`;
+    return url;
+}
+
 // Example replacements (original lines replaced below)
 // const res = await fetch('/api/copy_clipboard', { method: 'POST' });
 // → const res = await apiFetch('/api/copy_clipboard', { method: 'POST' });
@@ -123,7 +130,7 @@ function initApp() {
     });
 
     downloadTxtBtn.addEventListener('click', () => {
-        window.open('/api/download_txt', '_blank');
+        window.open(`${API_BASE}/api/download_txt`, '_blank');
     });
 
     browserBatchBtn.addEventListener('click', () => {
@@ -248,7 +255,7 @@ function initApp() {
             </div>
         `;
         try {
-            const res = await fetch(`/api/popular?page=${page}&per_page=16`);
+            const res = await apiFetch(`/api/popular?page=${page}&per_page=16`);
             const data = await res.json();
             if (data.success && data.results && data.results.length > 0) {
                 renderGames(data.results);
@@ -326,7 +333,7 @@ function initApp() {
 
         gamesGrid.innerHTML = games.map(game => `
             <div class="game-card" data-url="${game.url}">
-                <img class="card-poster" src="${game.cover || '/static/images/placeholder.svg'}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                <img class="card-poster" src="${fixCover(game.cover)}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                 <div class="card-content">
                     <h3 class="card-title">${game.title}</h3>
                     <span class="card-date">${game.date || 'FitGirl Repack'}</span>
@@ -366,7 +373,7 @@ function initApp() {
                 modalBody.innerHTML = `
                     <div class="modal-detail-grid">
                         <div>
-                            <img class="modal-poster" src="${g.cover || '/static/images/placeholder.svg'}" alt="${g.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                            <img class="modal-poster" src="${fixCover(g.cover)}" alt="${g.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                         </div>
                         <div class="modal-info">
                             <h2>${g.title}</h2>
