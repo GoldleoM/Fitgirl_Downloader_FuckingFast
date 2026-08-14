@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.2.0">
+    <link rel="stylesheet" href="styles.css?v=2.4.0">
 </head>
 <body>
 
@@ -81,6 +81,60 @@
                 <button class="filter-btn" id="btnLatest"><i class="fa-solid fa-clock"></i> Latest Repacks</button>
             </div>
         </div>
+
+        <!-- Category & Filter Menus -->
+        <section class="category-section">
+            <!-- Genre & Franchise Tag Chips -->
+            <div class="category-chips-wrapper">
+                <button class="category-chip active" data-genre="all"><i class="fa-solid fa-gamepad"></i> All Games</button>
+                <button class="category-chip" data-genre="action"><i class="fa-solid fa-crosshairs"></i> Action & Shooter</button>
+                <button class="category-chip" data-genre="rpg"><i class="fa-solid fa-wand-magic-sparkles"></i> RPG & Open World</button>
+                <button class="category-chip" data-genre="horror"><i class="fa-solid fa-ghost"></i> Horror & Survival</button>
+                <button class="category-chip" data-genre="racing"><i class="fa-solid fa-car-side"></i> Racing & Sports</button>
+                <button class="category-chip" data-genre="strategy"><i class="fa-solid fa-chess-knight"></i> Strategy & Sim</button>
+                <button class="category-chip" data-genre="indie"><i class="fa-solid fa-shapes"></i> Indie & Co-Op</button>
+                <button class="category-chip" data-genre="anime"><i class="fa-solid fa-dragon"></i> Anime & JRPG</button>
+            </div>
+
+            <!-- Sub Filter Controls Bar (Mode, Size, Direct Links, Reset) -->
+            <div class="filter-controls-bar">
+                <div class="filter-group">
+                    <span class="filter-group-title"><i class="fa-solid fa-network-wired"></i> Mode:</span>
+                    <div class="pill-group" id="filterModeGroup">
+                        <button class="filter-pill active" data-mode="all">All</button>
+                        <button class="filter-pill" data-mode="offline"><i class="fa-solid fa-user"></i> Offline / Story</button>
+                        <button class="filter-pill" data-mode="online"><i class="fa-solid fa-users"></i> Online / Multi</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-group-title"><i class="fa-solid fa-hard-drive"></i> Size:</span>
+                    <div class="pill-group" id="filterSizeGroup">
+                        <button class="filter-pill active" data-size="all">Any Size</button>
+                        <button class="filter-pill" data-size="under5">&lt; 5 GB</button>
+                        <button class="filter-pill" data-size="5to20">5 – 20 GB</button>
+                        <button class="filter-pill" data-size="20to50">20 – 50 GB</button>
+                        <button class="filter-pill" data-size="over50">50+ GB</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-group-title"><i class="fa-solid fa-bolt"></i> Status:</span>
+                    <div class="pill-group" id="filterStatusGroup">
+                        <button class="filter-pill active" data-status="all">All</button>
+                        <button class="filter-pill pill-ready" data-status="ready"><i class="fa-solid fa-bolt"></i> 1-Click Ready</button>
+                    </div>
+                </div>
+
+                <button class="btn-clear-filters hidden" id="btnClearFilters" title="Clear all active filters">
+                    <i class="fa-solid fa-rotate-left"></i> Reset
+                </button>
+            </div>
+
+            <div class="filter-results-summary hidden" id="filterSummaryBar">
+                <span id="filterSummaryText">Showing all matching repacks</span>
+            </div>
+        </section>
 
         <!-- Games Grid -->
         <div id="gamesGrid" class="games-grid">
@@ -220,6 +274,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=2.2.0" defer></script>
+    <script src="app.js?v=2.4.0" defer></script>
 </body>
 </html>

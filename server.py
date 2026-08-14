@@ -223,9 +223,13 @@ def _enrich_game_with_db_status(item):
         item['resolved'] = bool(db_game.get('resolved') and db_game.get('direct_links'))
         item['direct_links_count'] = len(db_game.get('direct_links', []))
         item['parts_count'] = db_game.get('parts_count') or len(db_game.get('fuckingfast_links', []))
+        item['repack_size'] = db_game.get('repack_size') or item.get('repack_size', 'N/A')
+        item['original_size'] = db_game.get('original_size') or item.get('original_size', 'N/A')
+        item['genres'] = db_game.get('genres') or item.get('genres', '')
     else:
         item['resolved'] = False
         item['direct_links_count'] = 0
+        item['repack_size'] = item.get('repack_size', 'N/A')
     return item
 
 @app.route('/api/catalog', methods=['GET'])

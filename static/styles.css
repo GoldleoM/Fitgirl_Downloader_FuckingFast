@@ -170,6 +170,11 @@ body {
     transform: scale(1.04);
 }
 
+/* Global Utility */
+.hidden {
+    display: none !important;
+}
+
 /* Search Suggestions Dropdown */
 .search-suggestions {
     position: absolute;
@@ -186,6 +191,11 @@ body {
     overflow-y: auto;
     padding: 0.5rem;
     animation: fadeInSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.search-suggestions.hidden,
+.search-suggestions:empty {
+    display: none !important;
 }
 
 @keyframes fadeInSlide {
@@ -434,6 +444,172 @@ body {
     background: var(--accent-purple);
     border-color: var(--accent-purple);
     box-shadow: 0 0 15px rgba(138, 43, 226, 0.4);
+}
+
+/* Category & Filter Menus */
+.category-section {
+    background: rgba(14, 17, 27, 0.7);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 1.2rem 1.4rem;
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.category-chips-wrapper {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 242, 254, 0.3) transparent;
+}
+
+.category-chips-wrapper::-webkit-scrollbar {
+    height: 4px;
+}
+
+.category-chips-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(0, 242, 254, 0.3);
+    border-radius: 4px;
+}
+
+.category-chip {
+    padding: 0.55rem 1.1rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.category-chip:hover {
+    background: rgba(0, 242, 254, 0.1);
+    border-color: rgba(0, 242, 254, 0.4);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.category-chip.active {
+    background: var(--gradient-primary);
+    color: #000;
+    border-color: var(--accent-cyan);
+    font-weight: 700;
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.35);
+    transform: scale(1.02);
+}
+
+.filter-controls-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 0.9rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.filter-group-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.pill-group {
+    display: flex;
+    gap: 0.3rem;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 3px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.filter-pill {
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.filter-pill:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.filter-pill.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.filter-pill.pill-ready.active {
+    background: rgba(0, 255, 135, 0.2);
+    color: #00ff87;
+    border-color: rgba(0, 255, 135, 0.4);
+    box-shadow: 0 0 10px rgba(0, 255, 135, 0.25);
+}
+
+.btn-clear-filters {
+    padding: 0.4rem 0.9rem;
+    border-radius: 14px;
+    background: rgba(255, 68, 68, 0.12);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    color: #ff5555;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.btn-clear-filters:hover {
+    background: rgba(255, 68, 68, 0.25);
+    transform: scale(1.04);
+}
+
+.filter-results-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.9rem;
+    background: rgba(0, 242, 254, 0.06);
+    border-radius: 10px;
+    border-left: 3px solid var(--accent-cyan);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #ffffff;
+    animation: fadeInSlide 0.2s ease;
 }
 
 /* Games Grid */
