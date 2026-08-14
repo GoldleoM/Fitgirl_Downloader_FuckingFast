@@ -94,12 +94,9 @@ def is_non_game_post(title, url):
     return False
 
 
-def search_games(query, max_results=12):
-    """Search games on FitGirl Repacks by keyword and resolve covers in parallel."""
-    if not query:
-        return get_catalog()
-        
-    search_url = f"https://fitgirl-repacks.site/?s={query.replace(' ', '+')}"
+def _scrape_fitgirl_search(query_str: str) -> list:
+    """Helper to scrape a single search query on FitGirl WordPress site."""
+    search_url = f"https://fitgirl-repacks.site/?s={query_str.replace(' ', '+')}"
     try:
         res = scraper.get(search_url, headers=HEADERS, timeout=15)
         if res.status_code != 200:
@@ -142,8 +139,41 @@ def search_games(query, max_results=12):
 
         return results
     except Exception as e:
-        print(f"Scraper error in search_games: {e}")
+        print(f"Scraper error in _scrape_fitgirl_search for '{query_str}': {e}")
         return []
+
+
+def search_games(query, max_results=16):
+    """Search games on FitGirl Repacks by keyword with typo-correction and alias fallback."""
+    if not query:
+        return get_catalog()
+
+    results = _scrape_fitgirl_search(query)
+    
+    # If 0 results, try typo-corrected and alias-expanded variations
+    if not results:
+        try:
+            import firestore_db
+            alt_queries = firestore_db.expand_search_query(query)
+            for alt in alt_queries:
+                if alt != query.lower().strip():
+                    alt_res = _scrape_fitgirl_search(alt)
+                    if alt_res:
+                        results.extend(alt_res)
+                        break
+        except Exception:
+            pass
+
+    # Deduplicate results by URL
+    seen_urls = set()
+    deduped = []
+    for item in results:
+        u = item.get('url')
+        if u and u not in seen_urls:
+            seen_urls.add(u)
+            deduped.append(item)
+
+    return deduped[:max_results]
 
 def get_catalog(page=1, max_results=16):
     """Get latest game repacks from homepage with instant non-blocking response."""

@@ -201,12 +201,21 @@ def _queue_auto_ingest(games_list):
         if url:
             _auto_ingest_executor.submit(_auto_ingest_single_game, url, g.get('title', ''))
 
+def _generate_slug(url: str, title: str = '') -> str:
+    cleaned = (url or '').rstrip('/')
+    slug = cleaned.split('/')[-1]
+    if not slug or slug.isdigit() or len(slug) < 3:
+        slug = (title or '').lower().strip()
+        slug = ''.join(c if c.isalnum() else '-' for c in slug)
+        slug = '-'.join(filter(None, slug.split('-')))
+    return slug
+
 def _enrich_game_with_db_status(item):
     """Adds resolved status, slug, and direct_links info from database to a game dict."""
     url = item.get('url', '')
     slug = item.get('slug')
     if not slug and url:
-        slug = url.rstrip('/').split('/')[-1]
+        slug = _generate_slug(url, item.get('title', ''))
     item['slug'] = slug
     
     db_game = firestore_db.get_game_by_slug(slug)
@@ -259,14 +268,55 @@ def api_search():
     query = request.args.get('q', '').strip()
     if not query:
         results = fitgirl_scraper.get_catalog()
-    else:
-        results = fitgirl_scraper.search_games(query)
-    
-    # Automatically queue all searched games to be ingested into Firestore in the background!
-    _queue_auto_ingest(results)
-    
-    enriched = [_enrich_game_with_db_status(g) for g in results]
-    return jsonify({'success': True, 'results': enriched})
+        _queue_auto_ingest(results)
+        enriched = [_enrich_game_with_db_status(g) for g in results]
+        return jsonify({'success': True, 'results': enriched})
+
+    # 1. Query Firestore / local database using fuzzy matching engine
+    db_fuzzy_results = firestore_db.fuzzy_search_games(query, limit=20, threshold=0.55)
+
+    # 2. Query FitGirl WordPress scraper (with typo-correction fallback)
+    web_results = fitgirl_scraper.search_games(query, max_results=16)
+
+    # 3. Automatically queue any web results to be auto-ingested into Firestore
+    _queue_auto_ingest(web_results)
+
+    # 4. Merge and deduplicate by slug or URL
+    merged = []
+    seen_slugs = set()
+    seen_urls = set()
+
+    for g in db_fuzzy_results:
+        slug = g.get('slug')
+        url = g.get('url')
+        if slug:
+            seen_slugs.add(slug)
+        if url:
+            seen_urls.add(url)
+        merged.append(g)
+
+    for g in web_results:
+        u = g.get('url', '')
+        s = _generate_slug(u, g.get('title', ''))
+        if s not in seen_slugs and u not in seen_urls:
+            seen_slugs.add(s)
+            seen_urls.add(u)
+            merged.append(g)
+
+    # 5. Enrich with live Firestore direct links status
+    enriched = [_enrich_game_with_db_status(g) for g in merged]
+
+    # 6. Rank all results by fuzzy similarity score
+    def get_score(item):
+        title = item.get('title', '')
+        sim = firestore_db.compute_game_similarity(query, title)
+        # Boost games that already have direct links in DB
+        boost = 0.05 if item.get('resolved') else 0.0
+        return sim + boost
+
+    enriched.sort(key=get_score, reverse=True)
+
+    return jsonify({'success': True, 'results': enriched[:24], 'query': query})
 
 @app.route('/api/game', methods=['GET'])
 def api_game():

@@ -334,3 +334,154 @@ def sync_local_to_firestore() -> int:
             print(f"[Sync] Failed to sync '{slug}': {e}")
     print(f"[Sync] Successfully uploaded {count} games to Firestore!")
     return count
+
+
+# --- Fuzzy Search Engine ---
+
+import difflib
+
+GAME_ALIASES = {
+    'gta': 'grand theft auto',
+    'gta5': 'grand theft auto 5',
+    'gta v': 'grand theft auto v',
+    'rdr': 'red dead redemption',
+    'rdr2': 'red dead redemption 2',
+    'cod': 'call of duty',
+    'nfs': 'need for speed',
+    'ac': 'assassins creed',
+    'gow': 'god of war',
+    're': 'resident evil',
+    're4': 'resident evil 4',
+    're2': 'resident evil 2',
+    're3': 'resident evil 3',
+    'spiderman': 'spider man',
+    'spider-man': 'spider man',
+    'cyber punk': 'cyberpunk',
+    'witcher 3': 'the witcher 3',
+    'witcher3': 'the witcher 3',
+    'wukong': 'black myth wukong'
+}
+
+COMMON_TYPOS = {
+    'assasins': 'assassins',
+    'assasin': 'assassin',
+    'asassins': 'assassins',
+    'asassin': 'assassin',
+    'crede': 'creed',
+    'ciberpunk': 'cyberpunk',
+    'cyperpunk': 'cyberpunk',
+    'spidrman': 'spiderman',
+    'reddead': 'red dead',
+    'reedemption': 'redemption',
+    'redemtion': 'redemption',
+    'resedent': 'resident',
+    'residentevil': 'resident evil'
+}
+
+def normalize_search_text(text: str) -> str:
+    if not text:
+        return ""
+    text = text.lower()
+    for char in ["'", '"', '’', '`', '-', '_', ':', ';', ',', '.', '!', '?', '(', ')', '[', ']', '/']:
+        text = text.replace(char, ' ')
+    return ' '.join(text.split())
+
+def expand_search_query(query: str) -> List[str]:
+    q_norm = normalize_search_text(query)
+    words = q_norm.split()
+    corrected_words = [COMMON_TYPOS.get(w, w) for w in words]
+    corrected_q = ' '.join(corrected_words)
+    
+    candidates = [q_norm, corrected_q]
+    
+    for k, v in GAME_ALIASES.items():
+        if k == q_norm or k == corrected_q:
+            candidates.append(v)
+        elif k in words or k in corrected_words:
+            candidates.append(q_norm.replace(k, v))
+            candidates.append(corrected_q.replace(k, v))
+            
+    return list(dict.fromkeys(candidates))
+
+def compute_game_similarity(query: str, title: str) -> float:
+    t_norm = normalize_search_text(title)
+    if not t_norm:
+        return 0.0
+        
+    queries = expand_search_query(query)
+    best_score = 0.0
+    
+    for q in queries:
+        if q in t_norm:
+            best_score = max(best_score, 1.0)
+            continue
+            
+        q_words = q.split()
+        t_words = t_norm.split()
+        
+        if not q_words or not t_words:
+            continue
+            
+        word_scores = []
+        for qw in q_words:
+            best_w = max([difflib.SequenceMatcher(None, qw, tw).ratio() for tw in t_words] + [0])
+            word_scores.append(best_w)
+            
+        avg_score = sum(word_scores) / len(word_scores)
+        seq_score = difflib.SequenceMatcher(None, q, t_norm).ratio()
+        best_score = max(best_score, avg_score, seq_score)
+        
+    return best_score
+
+
+_GAMES_MEMORY_CACHE = []
+_GAMES_CACHE_TIME = 0
+
+def get_all_cached_games() -> List[Dict[str, Any]]:
+    """Retrieves all games from Firestore (cached in RAM for 60s) or fallback local DB."""
+    global _GAMES_MEMORY_CACHE, _GAMES_CACHE_TIME
+    now = time.time()
+    if _GAMES_MEMORY_CACHE and (now - _GAMES_CACHE_TIME < 60):
+        return _GAMES_MEMORY_CACHE
+
+    games_list = []
+    db = init_firestore()
+    if db:
+        try:
+            docs = db.collection('games').stream()
+            for doc in docs:
+                games_list.append(doc.to_dict())
+        except Exception as e:
+            print(f"[Firestore] Error fetching all games: {e}")
+
+    if not games_list:
+        local_data = _load_local_db()
+        games_list = list(local_data.get('games', {}).values())
+
+    if games_list:
+        _GAMES_MEMORY_CACHE = games_list
+        _GAMES_CACHE_TIME = now
+
+    return games_list
+
+
+def fuzzy_search_games(query: str, limit: int = 24, threshold: float = 0.55) -> List[Dict[str, Any]]:
+    """
+    Performs fuzzy search across all stored games with typo-tolerance and alias resolution.
+    """
+    if not query:
+        return []
+
+    all_games = get_all_cached_games()
+    scored = []
+
+    for game in all_games:
+        title = game.get('title', '')
+        score = compute_game_similarity(query, title)
+        if score >= threshold:
+            scored.append((score, game))
+
+    # Sort descending by similarity score, then by rank
+    scored.sort(key=lambda x: (x[0], -x[1].get('rank', 9999)), reverse=True)
+    return [game for score, game in scored[:limit]]
+
