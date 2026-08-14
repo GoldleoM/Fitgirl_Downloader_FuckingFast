@@ -53,6 +53,153 @@ function initApp() {
 
     const btnPopular = document.getElementById('btnPopular');
     const btnLatest = document.getElementById('btnLatest');
+    const searchSuggestions = document.getElementById('searchSuggestions');
+
+    // Live Search Suggestions State
+    let suggestDebounceTimer = null;
+    let activeSuggestionIdx = -1;
+    let currentSuggestionsList = [];
+
+    function hideSuggestions() {
+        if (searchSuggestions) {
+            searchSuggestions.classList.add('hidden');
+            searchSuggestions.innerHTML = '';
+        }
+        activeSuggestionIdx = -1;
+        currentSuggestionsList = [];
+    }
+
+    function updateActiveSuggestion(items) {
+        items.forEach((it, idx) => {
+            if (idx === activeSuggestionIdx) {
+                it.classList.add('active');
+                it.scrollIntoView({ block: 'nearest' });
+            } else {
+                it.classList.remove('active');
+            }
+        });
+    }
+
+    function selectSuggestion(item) {
+        hideSuggestions();
+        if (searchInput) searchInput.value = item.title;
+        openGameModal(item.url, item.slug, item.cover);
+    }
+
+    async function fetchSuggestions(query) {
+        if (!query || query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/api/suggest?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.success && data.suggestions && data.suggestions.length > 0) {
+                currentSuggestionsList = data.suggestions;
+                renderSuggestions(data.suggestions, query);
+            } else {
+                hideSuggestions();
+            }
+        } catch (e) {
+            hideSuggestions();
+        }
+    }
+
+    function renderSuggestions(suggestions, query) {
+        if (!searchSuggestions) return;
+        activeSuggestionIdx = -1;
+
+        searchSuggestions.innerHTML = suggestions.map((item, idx) => {
+            const isResolved = item.resolved;
+            const badgeClass = isResolved ? 'available' : 'unavailable';
+            const badgeText = isResolved ? '<i class="fa-solid fa-bolt"></i> 1-Click Ready' : '<i class="fa-solid fa-cloud"></i> Repack';
+            const coverUrl = formatCoverUrl(item.cover);
+            
+            return `
+            <div class="suggestion-item" data-index="${idx}" data-url="${item.url}" data-slug="${item.slug}">
+                <img class="suggestion-thumb" src="${coverUrl}" alt="${item.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                <div class="suggestion-info">
+                    <div class="suggestion-title" title="${item.title}">${item.title}</div>
+                    <div class="suggestion-meta">
+                        <span><i class="fa-solid fa-hard-drive"></i> ${item.repack_size || 'N/A'}</span>
+                        <span><i class="fa-solid fa-layer-group"></i> ${item.parts_count || 0} Parts</span>
+                    </div>
+                </div>
+                <span class="suggestion-badge ${badgeClass}">${badgeText}</span>
+            </div>
+            `;
+        }).join('') + `
+        <div class="suggestion-footer-tip">
+            <span><i class="fa-solid fa-keyboard"></i> Use ↑↓ to navigate</span>
+            <span>Press <strong>Enter ↵</strong> to search all</span>
+        </div>
+        `;
+
+        searchSuggestions.classList.remove('hidden');
+
+        // Add click listeners to items
+        searchSuggestions.querySelectorAll('.suggestion-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.getAttribute('data-index'), 10);
+                if (currentSuggestionsList[idx]) {
+                    selectSuggestion(currentSuggestionsList[idx]);
+                }
+            });
+        });
+    }
+
+    // Search Input Event Listeners
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value.trim();
+            if (suggestDebounceTimer) clearTimeout(suggestDebounceTimer);
+            if (val.length < 2) {
+                hideSuggestions();
+                return;
+            }
+            suggestDebounceTimer = setTimeout(() => {
+                fetchSuggestions(val);
+            }, 200);
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            const isHidden = !searchSuggestions || searchSuggestions.classList.contains('hidden');
+            
+            if (e.key === 'ArrowDown' && !isHidden) {
+                e.preventDefault();
+                const items = searchSuggestions.querySelectorAll('.suggestion-item');
+                if (items.length > 0) {
+                    activeSuggestionIdx = (activeSuggestionIdx + 1) % items.length;
+                    updateActiveSuggestion(items);
+                }
+            } else if (e.key === 'ArrowUp' && !isHidden) {
+                e.preventDefault();
+                const items = searchSuggestions.querySelectorAll('.suggestion-item');
+                if (items.length > 0) {
+                    activeSuggestionIdx = (activeSuggestionIdx - 1 + items.length) % items.length;
+                    updateActiveSuggestion(items);
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (!isHidden && activeSuggestionIdx >= 0 && currentSuggestionsList[activeSuggestionIdx]) {
+                    selectSuggestion(currentSuggestionsList[activeSuggestionIdx]);
+                } else {
+                    hideSuggestions();
+                    handleSearch();
+                }
+            } else if (e.key === 'Escape') {
+                hideSuggestions();
+            }
+        });
+    }
+
+    // Dismiss suggestions on click outside
+    document.addEventListener('click', (e) => {
+        if (searchInput && searchSuggestions && !searchInput.contains(e.target) && !searchSuggestions.contains(e.target)) {
+            hideSuggestions();
+        }
+    });
 
     // Filter toggle listeners
     if (btnPopular) {
@@ -71,9 +218,9 @@ function initApp() {
         });
     }
 
-    if (searchBtn) searchBtn.addEventListener('click', () => handleSearch());
-    if (searchInput) searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
+    if (searchBtn) searchBtn.addEventListener('click', () => {
+        hideSuggestions();
+        handleSearch();
     });
 
     if (closeModal) closeModal.addEventListener('click', () => {

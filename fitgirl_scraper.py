@@ -301,6 +301,13 @@ try:
 except Exception:
     pass
 
+def get_all_popular_repacks():
+    """Returns the complete list of 150 popular repacks from RAM cache."""
+    global POPULAR_REPACKS_CACHE
+    if not POPULAR_REPACKS_CACHE:
+        POPULAR_REPACKS_CACHE = _fetch_all_popular_repacks(max_results=150)
+    return POPULAR_REPACKS_CACHE or []
+
 def get_popular_repacks(page=1, per_page=16):
     """Get paginated popular repacks (16 per page) with instant non-blocking response."""
     import math

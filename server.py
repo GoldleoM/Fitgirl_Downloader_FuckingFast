@@ -318,6 +318,54 @@ def api_search():
 
     return jsonify({'success': True, 'results': enriched[:24], 'query': query})
 
+@app.route('/api/suggest', methods=['GET'])
+def api_suggest():
+    query = request.args.get('q', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({'success': True, 'suggestions': []})
+
+    # 1. Fast fuzzy search against database and memory cache
+    suggestions = firestore_db.fuzzy_search_games(query, limit=8, threshold=0.45)
+    
+    # 2. If fewer than 4 suggestions, also check popular repacks in RAM
+    if len(suggestions) < 6:
+        pop_items = fitgirl_scraper.get_all_popular_repacks()
+        seen_slugs = {s.get('slug') for s in suggestions if s.get('slug')}
+        for item in pop_items:
+            slug = _generate_slug(item.get('url', ''), item.get('title', ''))
+            if slug not in seen_slugs:
+                sim = firestore_db.compute_game_similarity(query, item.get('title', ''))
+                if sim >= 0.50:
+                    item['slug'] = slug
+                    suggestions.append(item)
+                    seen_slugs.add(slug)
+            if len(suggestions) >= 8:
+                break
+
+    # 3. Enrich items with direct links status
+    enriched = [_enrich_game_with_db_status(g) for g in suggestions[:8]]
+    
+    # 4. Format clean, lightweight response
+    results = []
+    for g in enriched:
+        cov = g.get('cover')
+        if not cov or cov == 'None':
+            cov = f"/api/game_cover?url={g.get('url', '')}"
+        elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
+            cov = f"/api/image_proxy?url={cov}"
+            
+        results.append({
+            'title': g.get('title', 'Unknown Game'),
+            'slug': g.get('slug', ''),
+            'url': g.get('url', ''),
+            'cover': cov,
+            'repack_size': g.get('repack_size', 'N/A'),
+            'resolved': bool(g.get('resolved')),
+            'parts_count': g.get('parts_count', 0)
+        })
+
+    return jsonify({'success': True, 'suggestions': results, 'query': query})
+
 @app.route('/api/game', methods=['GET'])
 def api_game():
     game_url = request.args.get('url', '').strip()
