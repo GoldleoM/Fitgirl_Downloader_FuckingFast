@@ -1,8 +1,25 @@
-const API_BASE = "https://fitboy-backend.vercel.app/";
+// Normalize API base URL (remove any trailing slashes)
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? ""
+    : "https://fitboy-backend.vercel.app".replace(/\/+$/, "");
 
-// All fetch calls route through API_BASE for CORS-safe cross-origin requests
+function formatApiUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return API_BASE ? `${API_BASE}${cleanPath}` : cleanPath;
+}
+
+function formatCoverUrl(url) {
+    if (!url || url === 'None') return '/static/images/placeholder.svg';
+    if (url.startsWith('/api/')) return formatApiUrl(url);
+    if (url.startsWith('/static/')) return formatApiUrl(url);
+    return url;
+}
+
+// All fetch calls route through formatApiUrl for clean, redirect-free requests
 function apiFetch(path, options = {}) {
-    return fetch(`${API_BASE}${path}`, options);
+    return fetch(formatApiUrl(path), options);
 }
 
 function initApp() {
@@ -357,7 +374,7 @@ function initApp() {
 
             return `
             <div class="game-card" data-url="${game.url}" data-slug="${game.slug || ''}">
-                <img class="card-poster" src="${game.cover || '/static/images/placeholder.svg'}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                <img class="card-poster" src="${formatCoverUrl(game.cover)}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                 <div class="card-content">
                     <h3 class="card-title">${game.title}</h3>
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -390,7 +407,7 @@ function initApp() {
         gameModal.classList.remove('hidden');
 
         // Show initial loading modal using the already-loaded card poster for zero flicker
-        const initialPoster = cardPosterSrc || `/api/game_cover?url=${encodeURIComponent(gameUrl)}`;
+        const initialPoster = formatCoverUrl(cardPosterSrc || `/api/game_cover?url=${encodeURIComponent(gameUrl)}`);
         modalBody.innerHTML = `
             <div class="loading-spinner">
                 <div class="spinner"></div>
@@ -410,9 +427,10 @@ function initApp() {
                 let finalCover = g.cover || cardPosterSrc;
                 if (!finalCover || finalCover === 'None') {
                     finalCover = `/api/game_cover?url=${encodeURIComponent(g.url || gameUrl)}`;
-                } else if (finalCover.startsWith('http') && !finalCover.startsWith('/api/image_proxy') && !finalCover.startsWith('/api/game_cover')) {
+                } else if (finalCover.startsWith('http') && !finalCover.startsWith('/api/image_proxy') && !finalCover.startsWith('/api/game_cover') && finalCover.indexOf('vercel.app/api/') === -1) {
                     finalCover = `/api/image_proxy?url=${encodeURIComponent(finalCover)}`;
                 }
+                finalCover = formatCoverUrl(finalCover);
 
                 const alertBox = isResolved ? `
                     <div class="status-alert-box available">
