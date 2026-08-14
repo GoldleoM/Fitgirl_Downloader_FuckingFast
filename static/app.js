@@ -437,15 +437,15 @@ function initApp() {
                         <i class="fa-solid fa-circle-check"></i>
                         <div>
                             <strong>Direct Download Links Available in Database!</strong>
-                            <p>All ${partsCount} direct download parts are pre-extracted. Click below for instant 1-click download with zero wait time.</p>
+                            <p>All ${partsCount} direct download parts are pre-extracted in Firestore. Click below for instant 1-click download with zero wait time.</p>
                         </div>
                     </div>
                 ` : `
                     <div class="status-alert-box unavailable">
-                        <i class="fa-solid fa-clock"></i>
+                        <i class="fa-solid fa-cloud-arrow-down"></i>
                         <div>
-                            <strong>Direct Links Not Available in Database Yet</strong>
-                            <p>All ${partsCount} FuckingFast part links are stored in Firestore. Run <code>python fetch_missing_links.py</code> on your laptop to generate direct links for this game.</p>
+                            <strong>Direct 1-Click Links Not Cached in Cloud Yet</strong>
+                            <p>Copy the raw part links below and extract direct links in seconds on your PC using the standalone <strong>FitBoy Local Link Extractor (.exe)</strong> (zero dependencies / no installation).</p>
                         </div>
                     </div>
                 `;
@@ -468,7 +468,7 @@ function initApp() {
                             <ul class="features-list">
                                 ${g.features && g.features.length > 0
                         ? g.features.map(f => `<li>${f}</li>`).join('')
-                        : '<li>Verified lossless FitGirl Repack</li><li>Fast installation and MD5 integrity verification</li>'}
+                        : '<li>Verified lossless FitBoy Repack</li><li>Fast installation and MD5 integrity verification</li>'}
                             </ul>
 
                             <div class="modal-actions-row">
@@ -480,9 +480,9 @@ function initApp() {
                                     <button id="copyRawLinksBtn" class="btn-primary glow-btn" data-title="${g.title}">
                                         <i class="fa-solid fa-copy"></i> Copy Raw FuckingFast Links (${partsCount} Parts)
                                     </button>
-                                    <button id="startDownloadBtn" class="btn-secondary" data-url="${g.url}" data-slug="${g.slug || ''}" data-title="${g.title}" title="Attempt browser extraction">
-                                        <i class="fa-solid fa-bolt"></i> Live Extract
-                                    </button>
+                                    <a href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/tag/v1.0.1" target="_blank" rel="noopener noreferrer" class="btn-accent-download">
+                                        <i class="fa-brands fa-github"></i> Download Local Extractor (.exe)
+                                    </a>
                                 `}
                                 <a href="${g.url}" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-fitgirl-modal">
                                     <i class="fa-solid fa-arrow-up-right-from-square"></i> FitGirl Page
@@ -505,7 +505,7 @@ function initApp() {
                                 copyRawBtn.innerHTML = orig;
                                 copyRawBtn.style.background = '';
                             }, 2500);
-                            alert(`📋 ${g.fuckingfast_links.length} FuckingFast links copied to clipboard!\n\nTo generate direct links, run:\npython fetch_missing_links.py --slug ${g.slug}`);
+                            alert(`📋 ${g.fuckingfast_links.length} FuckingFast links copied to clipboard!\n\nPaste them into the FitBoy Local Link Extractor (.exe) to instantly generate download_links.txt locally!`);
                         } catch (e) {
                             alert(`Could not copy to clipboard: ${e.message}`);
                         }
