@@ -10,4 +10,7 @@ serviceAccountKey.json
 firebase-key.json
 *.local.json
 games_db.json
+.env
+*.env
+.env.*
 
