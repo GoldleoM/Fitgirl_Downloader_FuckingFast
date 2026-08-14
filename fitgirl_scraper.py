@@ -144,14 +144,30 @@ def _scrape_fitgirl_search(query_str: str) -> list:
 
 
 def search_games(query, max_results=16):
-    """Search games on FitGirl Repacks by keyword with typo-correction and alias fallback."""
+    """Search games on FitGirl Repacks by keyword with typo-correction, alias fallback, and popular repacks index."""
     if not query:
         return get_catalog()
 
-    results = _scrape_fitgirl_search(query)
-    
-    # If 0 results, try typo-corrected and alias-expanded variations
-    if not results:
+    results = []
+
+    # 1. Check in-memory Top Popular Repacks list (fastest, zero-latency response)
+    pop_items = get_all_popular_repacks()
+    if pop_items:
+        try:
+            import firestore_db
+            for item in pop_items:
+                sim = firestore_db.compute_game_similarity(query, item.get('title', ''))
+                if sim >= 0.60:
+                    results.append(item)
+        except Exception:
+            pass
+
+    # 2. Scrape WordPress for query
+    web_res = _scrape_fitgirl_search(query)
+    results.extend(web_res)
+
+    # 3. If no web results, try typo-corrected / alias expansions on WordPress
+    if not web_res:
         try:
             import firestore_db
             alt_queries = firestore_db.expand_search_query(query)
