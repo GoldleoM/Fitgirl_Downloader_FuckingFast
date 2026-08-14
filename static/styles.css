@@ -429,6 +429,82 @@ body {
     text-decoration: none;
 }
 
+/* Status Badges */
+.badge-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.badge-available {
+    background: rgba(0, 255, 135, 0.15);
+    color: #00ff87;
+    border: 1px solid rgba(0, 255, 135, 0.4);
+    box-shadow: 0 0 10px rgba(0, 255, 135, 0.2);
+}
+
+.badge-unavailable {
+    background: rgba(255, 170, 0, 0.12);
+    color: #ffaa00;
+    border: 1px solid rgba(255, 170, 0, 0.3);
+}
+
+/* Modal Status Alert Box */
+.status-alert-box {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.2rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.status-alert-box i {
+    font-size: 1.3rem;
+    margin-top: 2px;
+}
+
+.status-alert-box.available {
+    background: rgba(0, 255, 135, 0.08);
+    border: 1px solid rgba(0, 255, 135, 0.3);
+    color: #f0fdf4;
+}
+
+.status-alert-box.available i {
+    color: #00ff87;
+}
+
+.status-alert-box.unavailable {
+    background: rgba(255, 170, 0, 0.08);
+    border: 1px solid rgba(255, 170, 0, 0.3);
+    color: #fffbeb;
+}
+
+.status-alert-box.unavailable i {
+    color: #ffaa00;
+}
+
+.status-alert-box p {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.status-alert-box code {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: var(--accent-cyan);
+}
+
 /* Modals & Drawers */
 .modal-overlay, .drawer-overlay {
     position: fixed;

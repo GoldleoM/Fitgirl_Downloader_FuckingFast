@@ -3,6 +3,10 @@ beautifulsoup4
 colorama
 cloudscraper
 curl_cffi
+DrissionPage>=4.1.0
 flask
 flask-cors
 gunicorn
+firebase-admin>=6.5.0
+
+

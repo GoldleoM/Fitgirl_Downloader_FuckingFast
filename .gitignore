@@ -5,3 +5,9 @@ __pycache__/
 node_modules/
 * - Copy*
 *- Copy*
+serviceAccountKey.json
+*serviceAccount*.json
+firebase-key.json
+*.local.json
+games_db.json
+

@@ -1,11 +1,23 @@
 import os
+import sys
 import uuid
 import threading
+import concurrent.futures
 import tempfile
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 import fitgirl_scraper
 import fdm_bridge
+import firestore_db
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 # Vercel's filesystem is read-only except /tmp
 TMP_DIR = os.getenv('TMP_DIR', tempfile.gettempdir())
@@ -114,12 +126,14 @@ FALLBACK_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="300" height="40
 def proxy_image(img_url):
     if not img_url:
         return Response(FALLBACK_SVG, mimetype='image/svg+xml')
+    if img_url.startswith('//'):
+        img_url = 'https:' + img_url
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://fitgirl-repacks.site/'
         }
-        res = fitgirl_scraper.scraper.get(img_url, headers=headers, timeout=10)
+        res = fitgirl_scraper.scraper.get(img_url, headers=headers, timeout=12)
         if res.status_code == 200 and len(res.content) > 100:
             content_type = res.headers.get('Content-Type', 'image/jpeg')
             return Response(res.content, mimetype=content_type)
@@ -143,54 +157,203 @@ def api_game_cover():
         return proxy_image(img_url)
     return Response(FALLBACK_SVG, mimetype='image/svg+xml')
 
+# Background auto-ingestion worker for automatic database expansion on searches
+_auto_ingest_executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+
+def _auto_ingest_single_game(game_url, raw_title=""):
+    """Fetches details & fuckingfast links for an un-cached game and saves to DB."""
+    if not game_url:
+        return
+    try:
+        slug = game_url.rstrip('/').split('/')[-1]
+        existing = firestore_db.get_game_by_slug(slug)
+        if existing and existing.get('fuckingfast_links') and len(existing['fuckingfast_links']) > 0:
+            return  # Already stored with all raw links
+
+        details = fitgirl_scraper.get_game_details(game_url)
+        if details and details.get('fuckingfast_links'):
+            details['slug'] = slug
+            if not existing:
+                details['resolved'] = False
+                details['direct_links'] = []
+            else:
+                details['resolved'] = existing.get('resolved', False)
+                details['direct_links'] = existing.get('direct_links', [])
+            
+            firestore_db.upsert_game(details)
+            print(f"[AutoIngest] Stored '{details.get('title', slug)}' with {len(details['fuckingfast_links'])} parts in Firestore!")
+    except Exception as e:
+        print(f"[AutoIngest] Error for {game_url}: {e}")
+
+def _queue_auto_ingest(games_list):
+    """Queue games in background thread pool to store their FuckingFast links."""
+    if not games_list:
+        return
+    for g in games_list:
+        url = g.get('url')
+        if url:
+            _auto_ingest_executor.submit(_auto_ingest_single_game, url, g.get('title', ''))
+
+def _enrich_game_with_db_status(item):
+    """Adds resolved status, slug, and direct_links info from database to a game dict."""
+    url = item.get('url', '')
+    slug = item.get('slug')
+    if not slug and url:
+        slug = url.rstrip('/').split('/')[-1]
+    item['slug'] = slug
+    
+    db_game = firestore_db.get_game_by_slug(slug)
+    if db_game:
+        item['resolved'] = bool(db_game.get('resolved') and db_game.get('direct_links'))
+        item['direct_links_count'] = len(db_game.get('direct_links', []))
+        item['parts_count'] = db_game.get('parts_count') or len(db_game.get('fuckingfast_links', []))
+    else:
+        item['resolved'] = False
+        item['direct_links_count'] = 0
+    return item
+
 @app.route('/api/catalog', methods=['GET'])
 def api_catalog():
     page = request.args.get('page', 1, type=int)
     catalog = fitgirl_scraper.get_catalog(page=page, max_results=16)
-    return jsonify({'success': True, 'catalog': catalog, 'page': page})
+    
+    # Auto-ingest catalog page games in background into Firestore!
+    _queue_auto_ingest(catalog)
+    
+    enriched = [_enrich_game_with_db_status(g) for g in catalog]
+    return jsonify({'success': True, 'catalog': enriched, 'page': page})
 
 @app.route('/api/popular', methods=['GET'])
 def api_popular():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 16, type=int)
+    
+    # 1. Fetch full 150 Popular Repacks catalog (paginated into 10 pages)
     res = fitgirl_scraper.get_popular_repacks(page=page, per_page=per_page)
+    items = res.get('items', [])
+    
+    # 2. Auto-ingest any un-cached games in background into Firestore
+    _queue_auto_ingest(items)
+    
+    # 3. Enrich each game on this page with live Firestore database status
+    enriched = [_enrich_game_with_db_status(g) for g in items]
+    
     return jsonify({
         'success': True,
-        'results': res['items'],
-        'page': res['page'],
-        'per_page': res['per_page'],
-        'total_pages': res['total_pages'],
-        'total_items': res['total_items']
+        'results': enriched,
+        'page': res.get('page', page),
+        'per_page': res.get('per_page', per_page),
+        'total_pages': res.get('total_pages', 10),
+        'total_items': res.get('total_items', 150)
     })
 
 @app.route('/api/search', methods=['GET'])
 def api_search():
     query = request.args.get('q', '').strip()
     if not query:
-        return jsonify({'success': True, 'results': fitgirl_scraper.get_catalog()})
-    results = fitgirl_scraper.search_games(query)
-    return jsonify({'success': True, 'results': results})
+        results = fitgirl_scraper.get_catalog()
+    else:
+        results = fitgirl_scraper.search_games(query)
+    
+    # Automatically queue all searched games to be ingested into Firestore in the background!
+    _queue_auto_ingest(results)
+    
+    enriched = [_enrich_game_with_db_status(g) for g in results]
+    return jsonify({'success': True, 'results': enriched})
 
 @app.route('/api/game', methods=['GET'])
 def api_game():
     game_url = request.args.get('url', '').strip()
-    if not game_url:
-        return jsonify({'success': False, 'error': 'Missing url parameter'}), 400
-        
-    details = fitgirl_scraper.get_game_details(game_url)
-    if not details:
-        return jsonify({'success': False, 'error': 'Could not fetch game details'}), 404
-        
-    return jsonify({'success': True, 'game': details})
+    game_slug = request.args.get('slug', '').strip()
+    
+    if not game_url and not game_slug:
+        return jsonify({'success': False, 'error': 'Missing url or slug parameter'}), 400
+
+    # 1. Check database for existing game by slug
+    if not game_slug and game_url:
+        cleaned = game_url.rstrip('/')
+        game_slug = cleaned.split('/')[-1]
+
+    if game_slug:
+        db_game = firestore_db.get_game_by_slug(game_slug)
+        if db_game:
+            # Normalize cover image URL
+            cov = db_game.get('cover')
+            if not cov or cov == 'None':
+                db_game['cover'] = f"/api/game_cover?url={db_game.get('url', game_url)}"
+            elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
+                db_game['cover'] = f"/api/image_proxy?url={cov}"
+                
+            if db_game.get('fuckingfast_links') and len(db_game['fuckingfast_links']) > 0:
+                return jsonify({'success': True, 'game': db_game})
+
+    # 2. If not found in DB or missing raw links, scrape from FitGirl and store raw fuckingfast links in DB!
+    if game_url:
+        details = fitgirl_scraper.get_game_details(game_url)
+        if details:
+            if not game_slug:
+                game_slug = game_url.rstrip('/').split('/')[-1]
+            details['slug'] = game_slug
+            if 'resolved' not in details:
+                details['resolved'] = False
+            if 'direct_links' not in details:
+                details['direct_links'] = []
+            
+            cov = details.get('cover')
+            if not cov or cov == 'None':
+                details['cover'] = f"/api/game_cover?url={game_url}"
+            elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
+                details['cover'] = f"/api/image_proxy?url={cov}"
+            
+            # Save raw fuckingfast links into Firestore so user can resolve them with the script later
+            firestore_db.upsert_game(details)
+            return jsonify({'success': True, 'game': details})
+            
+    return jsonify({'success': False, 'error': 'Could not fetch game details'}), 404
+
+@app.route('/api/db_stats', methods=['GET'])
+def api_db_stats():
+    """Returns overview of Firestore database status."""
+    is_connected = firestore_db.is_firestore_connected()
+    all_games = firestore_db.get_all_popular_games(page=1, per_page=500)
+    items = all_games.get('items', [])
+    total = len(items)
+    resolved = sum(1 for g in items if g.get('resolved') and g.get('direct_links'))
+    return jsonify({
+        'firestore_connected': is_connected,
+        'total_games': total,
+        'resolved_games': resolved,
+        'pending_games': max(0, total - resolved)
+    })
 
 @app.route('/api/start_download', methods=['POST'])
 def api_start_download():
     data = request.json or {}
     game_title = data.get('game_title', 'Unknown Game')
+    game_slug = data.get('slug')
     links = data.get('links', [])
+    game_url = data.get('game_url')
+
+    # If slug or game_url is provided, check if direct links already exist in DB!
+    if not game_slug and game_url:
+        cleaned = game_url.rstrip('/')
+        game_slug = cleaned.split('/')[-1]
+
+    if game_slug:
+        db_game = firestore_db.get_game_by_slug(game_slug)
+        if db_game and db_game.get('resolved') and db_game.get('direct_links'):
+            # Instant 0-second delivery! No browser spinning required!
+            direct_links = db_game['direct_links']
+            return jsonify({
+                'success': True,
+                'instant': True,
+                'job_id': 'pre-resolved',
+                'game_title': db_game.get('title', game_title),
+                'total_parts': len(direct_links),
+                'direct_links': direct_links
+            })
     
     if not links:
-        game_url = data.get('game_url')
         if game_url:
             details = fitgirl_scraper.get_game_details(game_url)
             if details:
@@ -224,14 +387,36 @@ def api_start_download():
 
 @app.route('/api/extract_links', methods=['POST'])
 def api_extract_links():
-    """Serverless-compatible: resolve FuckingFast links synchronously in-process.
-    No background threads, no subprocess, no file I/O state."""
+    """Returns pre-extracted direct links from database instantly, or resolves via bridge."""
     data = request.json or {}
     game_title = data.get('game_title', 'Unknown Game')
+    game_slug = data.get('slug')
+    game_url = data.get('game_url')
     links = data.get('links', [])
-    
+
+    # 1. Check if already resolved in Firestore / Database!
+    if not game_slug and game_url:
+        cleaned = game_url.rstrip('/')
+        game_slug = cleaned.split('/')[-1]
+
+    if game_slug:
+        db_game = firestore_db.get_game_by_slug(game_slug)
+        if db_game and db_game.get('resolved') and db_game.get('direct_links'):
+            direct_links = db_game['direct_links']
+            return jsonify({
+                'success': True,
+                'instant': True,
+                'game_title': db_game.get('title', game_title),
+                'total_parts': len(direct_links),
+                'extracted_count': len(direct_links),
+                'direct_links': direct_links,
+                'logs': [
+                    f"> ⚡ Found pre-extracted direct links in Database for '{db_game.get('title', game_title)}'!",
+                    f"> 🚀 Instantly loaded all {len(direct_links)} direct download links in 0.01 seconds!"
+                ]
+            })
+
     if not links:
-        game_url = data.get('game_url')
         if game_url:
             details = fitgirl_scraper.get_game_details(game_url)
             if details:

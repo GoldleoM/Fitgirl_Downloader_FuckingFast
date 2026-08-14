@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:7860";
+const API_BASE = "https://fitboy-backend.vercel.app/";
 
 // All fetch calls route through API_BASE for CORS-safe cross-origin requests
 function apiFetch(path, options = {}) {
@@ -349,56 +349,104 @@ function initApp() {
             return;
         }
 
-        gamesGrid.innerHTML = games.map(game => `
-            <div class="game-card" data-url="${game.url}">
+        gamesGrid.innerHTML = games.map(game => {
+            const isResolved = game.resolved && ((game.direct_links && game.direct_links.length > 0) || (game.direct_links_count && game.direct_links_count > 0));
+            const statusBadge = isResolved
+                ? `<span class="badge-status badge-available"><i class="fa-solid fa-circle-check"></i> Links Available</span>`
+                : `<span class="badge-status badge-unavailable"><i class="fa-solid fa-clock"></i> Links Not Available</span>`;
+
+            return `
+            <div class="game-card" data-url="${game.url}" data-slug="${game.slug || ''}">
                 <img class="card-poster" src="${game.cover || '/static/images/placeholder.svg'}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                 <div class="card-content">
                     <h3 class="card-title">${game.title}</h3>
-                    <span class="card-date">${game.date || 'FitGirl Repack'}</span>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <span class="card-date">${game.date || 'FitGirl Repack'}</span>
+                        ${statusBadge}
+                    </div>
                     <div class="card-footer">
-                        <button class="btn-get"><i class="fa-solid fa-download"></i> View & Download</button>
+                        <button class="btn-get"><i class="fa-solid ${isResolved ? 'fa-bolt' : 'fa-eye'}"></i> ${isResolved ? 'Instant Download' : 'View Repack'}</button>
                         <a href="${game.url}" target="_blank" rel="noopener noreferrer" class="btn-fitgirl" onclick="event.stopPropagation()">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i> FitGirl
                         </a>
                     </div>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         // Add event listeners to cards
         document.querySelectorAll('.game-card').forEach(card => {
             card.addEventListener('click', () => {
                 const gameUrl = card.getAttribute('data-url');
-                openGameModal(gameUrl);
+                const gameSlug = card.getAttribute('data-slug');
+                const cardImg = card.querySelector('.card-poster')?.getAttribute('src') || '';
+                openGameModal(gameUrl, gameSlug, cardImg);
             });
         });
     }
 
-    async function openGameModal(gameUrl) {
+    async function openGameModal(gameUrl, gameSlug = '', cardPosterSrc = '') {
         gameModal.classList.remove('hidden');
+
+        // Show initial loading modal using the already-loaded card poster for zero flicker
+        const initialPoster = cardPosterSrc || `/api/game_cover?url=${encodeURIComponent(gameUrl)}`;
         modalBody.innerHTML = `
             <div class="loading-spinner">
                 <div class="spinner"></div>
-                <p>Loading game details & FuckingFast mirrors...</p>
+                <p>Loading game details & mirrors from database...</p>
             </div>
         `;
 
         try {
-            const res = await apiFetch(`/api/game?url=${encodeURIComponent(gameUrl)}`);
+            const queryParam = gameSlug ? `slug=${encodeURIComponent(gameSlug)}` : `url=${encodeURIComponent(gameUrl)}`;
+            const res = await apiFetch(`/api/game?${queryParam}`);
             const data = await res.json();
             if (data.success && data.game) {
                 const g = data.game;
+                const isResolved = g.resolved && g.direct_links && g.direct_links.length > 0;
+                const partsCount = (g.direct_links && g.direct_links.length > 0) ? g.direct_links.length : (g.parts_count || (g.fuckingfast_links ? g.fuckingfast_links.length : 0));
+
+                let finalCover = g.cover || cardPosterSrc;
+                if (!finalCover || finalCover === 'None') {
+                    finalCover = `/api/game_cover?url=${encodeURIComponent(g.url || gameUrl)}`;
+                } else if (finalCover.startsWith('http') && !finalCover.startsWith('/api/image_proxy') && !finalCover.startsWith('/api/game_cover')) {
+                    finalCover = `/api/image_proxy?url=${encodeURIComponent(finalCover)}`;
+                }
+
+                const alertBox = isResolved ? `
+                    <div class="status-alert-box available">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div>
+                            <strong>Direct Download Links Available in Database!</strong>
+                            <p>All ${partsCount} direct download parts are pre-extracted. Click below for instant 1-click download with zero wait time.</p>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="status-alert-box unavailable">
+                        <i class="fa-solid fa-clock"></i>
+                        <div>
+                            <strong>Direct Links Not Available in Database Yet</strong>
+                            <p>All ${partsCount} FuckingFast part links are stored in Firestore. Run <code>python fetch_missing_links.py</code> on your laptop to generate direct links for this game.</p>
+                        </div>
+                    </div>
+                `;
+
                 modalBody.innerHTML = `
                     <div class="modal-detail-grid">
                         <div>
-                            <img class="modal-poster" src="${g.cover || '/static/images/placeholder.svg'}" alt="${g.title}" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
+                            <img class="modal-poster" src="${finalCover}" alt="${g.title}" onerror="if(this.src.indexOf('/api/game_cover')===-1){this.src='/api/game_cover?url=${encodeURIComponent(g.url || gameUrl)}';}else{this.onerror=null;this.src='/static/images/placeholder.svg';}">
                         </div>
                         <div class="modal-info">
                             <h2>${g.title}</h2>
                             <div class="tags-row">
-                                <span class="tag-badge"><i class="fa-solid fa-hard-drive"></i> Repack Size: ${g.repack_size}</span>
-                                <span class="tag-badge"><i class="fa-solid fa-layer-group"></i> ${g.parts_count} FuckingFast Parts</span>
+                                <span class="tag-badge"><i class="fa-solid fa-hard-drive"></i> Repack Size: ${g.repack_size || 'N/A'}</span>
+                                <span class="tag-badge"><i class="fa-solid fa-layer-group"></i> ${partsCount} Parts in Database</span>
+                                ${isResolved ? `<span class="tag-badge" style="background:rgba(0,255,135,0.15); color:#00ff87; border:1px solid rgba(0,255,135,0.4);"><i class="fa-solid fa-bolt"></i> Links Available</span>` : `<span class="tag-badge" style="background:rgba(255,170,0,0.12); color:#ffaa00; border:1px solid rgba(255,170,0,0.3);"><i class="fa-solid fa-clock"></i> Links Not Available</span>`}
                             </div>
+                            
+                            ${alertBox}
+
                             <ul class="features-list">
                                 ${g.features && g.features.length > 0
                         ? g.features.map(f => `<li>${f}</li>`).join('')
@@ -406,22 +454,56 @@ function initApp() {
                             </ul>
 
                             <div class="modal-actions-row">
-                                <button id="startDownloadBtn" class="btn-primary glow-btn" data-url="${g.url}" data-title="${g.title}">
-                                    <i class="fa-solid fa-copy"></i> Extract Links & Copy All ${g.parts_count} Parts
-                                </button>
+                                ${isResolved ? `
+                                    <button id="startDownloadBtn" class="btn-primary glow-btn" data-url="${g.url}" data-slug="${g.slug || ''}" data-title="${g.title}">
+                                        <i class="fa-solid fa-bolt"></i> Instant 1-Click Download (${partsCount} Direct Parts)
+                                    </button>
+                                ` : `
+                                    <button id="copyRawLinksBtn" class="btn-primary glow-btn" data-title="${g.title}">
+                                        <i class="fa-solid fa-copy"></i> Copy Raw FuckingFast Links (${partsCount} Parts)
+                                    </button>
+                                    <button id="startDownloadBtn" class="btn-secondary" data-url="${g.url}" data-slug="${g.slug || ''}" data-title="${g.title}" title="Attempt browser extraction">
+                                        <i class="fa-solid fa-bolt"></i> Live Extract
+                                    </button>
+                                `}
                                 <a href="${g.url}" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-fitgirl-modal">
-                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Open on FitGirl
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> FitGirl Page
                                 </a>
                             </div>
                         </div>
                     </div>
                 `;
 
-                document.getElementById('startDownloadBtn').addEventListener('click', (e) => {
-                    const title = e.currentTarget.getAttribute('data-title');
-                    const url = e.currentTarget.getAttribute('data-url');
-                    startDownloadProcess(title, url, g.fuckingfast_links);
-                });
+                // Handle copy raw links button
+                const copyRawBtn = document.getElementById('copyRawLinksBtn');
+                if (copyRawBtn && g.fuckingfast_links && g.fuckingfast_links.length > 0) {
+                    copyRawBtn.addEventListener('click', async () => {
+                        try {
+                            await navigator.clipboard.writeText(g.fuckingfast_links.join('\n'));
+                            const orig = copyRawBtn.innerHTML;
+                            copyRawBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied to Clipboard!';
+                            copyRawBtn.style.background = 'var(--gradient-purple)';
+                            setTimeout(() => {
+                                copyRawBtn.innerHTML = orig;
+                                copyRawBtn.style.background = '';
+                            }, 2500);
+                            alert(`📋 ${g.fuckingfast_links.length} FuckingFast links copied to clipboard!\n\nTo generate direct links, run:\npython fetch_missing_links.py --slug ${g.slug}`);
+                        } catch (e) {
+                            alert(`Could not copy to clipboard: ${e.message}`);
+                        }
+                    });
+                }
+
+                // Handle start download button
+                const startBtn = document.getElementById('startDownloadBtn');
+                if (startBtn) {
+                    startBtn.addEventListener('click', (e) => {
+                        const title = e.currentTarget.getAttribute('data-title');
+                        const url = e.currentTarget.getAttribute('data-url');
+                        const slug = e.currentTarget.getAttribute('data-slug');
+                        startDownloadProcess(title, url, g.fuckingfast_links, slug);
+                    });
+                }
             } else {
                 modalBody.innerHTML = `<p style="color: red; text-align: center;">Could not load game details.</p>`;
             }
@@ -430,18 +512,18 @@ function initApp() {
         }
     }
 
-    async function startDownloadProcess(title, gameUrl, links) {
+    async function startDownloadProcess(title, gameUrl, links, gameSlug = '') {
         gameModal.classList.add('hidden');
         downloadDrawer.classList.remove('hidden');
         drawerGameTitle.innerText = title;
-        drawerStatusText.innerText = "Extracting direct download links...";
+        drawerStatusText.innerText = "Loading download links...";
 
         const total = links ? links.length : 0;
         progressBar.style.width = "0%";
         progressCounter.innerText = `0 / ${total} Parts Extracted`;
         progressPercentBadge.innerText = "0%";
-        currentPartText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Resolving FuckingFast links (this may take a minute)...`;
-        terminalLogs.innerHTML = `<div class="log-line text-muted">> Sending ${total} links to extraction API...</div>`;
+        currentPartText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking database & resolving links...`;
+        terminalLogs.innerHTML = `<div class="log-line text-muted">> Fetching direct links for '${title}'...</div>`;
 
         copyClipboardBtn.disabled = true;
         downloadTxtBtn.disabled = true;
@@ -449,13 +531,13 @@ function initApp() {
         extractedLinksCache = [];
 
         try {
-            // Use the synchronous /api/extract_links endpoint (Vercel-compatible)
             const res = await apiFetch('/api/extract_links', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     game_title: title,
                     game_url: gameUrl,
+                    slug: gameSlug,
                     links: links
                 })
             });
