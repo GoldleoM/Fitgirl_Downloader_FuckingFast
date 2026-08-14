@@ -227,7 +227,8 @@ def run_download_pipeline(links, log_callback=None):
         open(output_file, 'w', encoding='utf-8').close()
 
     # 2. Spawn download.py as child process, passing temp dir
-    cmd = [sys.executable, 'download.py', '--temp-dir', TMP_DIR]
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'download.py')
+    cmd = [sys.executable, script_path, '--temp-dir', TMP_DIR]
     if log_callback:
         log_callback("Starting download.py processing pipeline...")
 

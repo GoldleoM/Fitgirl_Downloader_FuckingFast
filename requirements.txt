@@ -2,6 +2,7 @@ requests
 beautifulsoup4
 colorama
 cloudscraper
+curl_cffi
 flask
 flask-cors
 gunicorn
