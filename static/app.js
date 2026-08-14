@@ -201,6 +201,22 @@ function initApp() {
         }
     });
 
+    // Brand Logo Click -> Navigate Home (Popular Repacks Page 1)
+    const brandLogo = document.getElementById('brandLogo') || document.querySelector('.logo-container');
+    if (brandLogo) {
+        brandLogo.addEventListener('click', () => {
+            if (searchInput) searchInput.value = '';
+            hideSuggestions();
+            if (btnPopular) btnPopular.classList.add('active');
+            if (btnLatest) btnLatest.classList.remove('active');
+            if (gameModal) gameModal.classList.add('hidden');
+            if (downloadDrawer) downloadDrawer.classList.add('hidden');
+            if (pollInterval) clearInterval(pollInterval);
+            loadPopular(1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
     // Filter toggle listeners
     if (btnPopular) {
         btnPopular.addEventListener('click', () => {
