@@ -41,6 +41,32 @@ RATE_LIMIT_STORE = {}
 RATE_LIMIT_LOCK = threading.Lock()
 MAX_REQUESTS_PER_MINUTE = 150
 
+
+def _normalized_url_set(urls):
+    """Return a comparable, duplicate-free set of submitted URLs."""
+    if not isinstance(urls, list):
+        return None
+    normalized = set()
+    for url in urls:
+        if not isinstance(url, str) or not url.strip():
+            return None
+        normalized.add(url.strip())
+    return normalized or None
+
+
+def _is_expected_direct_link(url):
+    """Limit community submissions to direct links from the expected host."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or '').lower()
+        return (
+            parsed.scheme == 'https'
+            and host in {'dl.fuckingfast.co', 'fuckingfast.co'}
+            and parsed.path.startswith('/dl/')
+        )
+    except (TypeError, ValueError):
+        return False
+
 def is_safe_proxy_url(url: str) -> bool:
     """Blocks SSRF attacks by preventing access to localhost, internal networks, and cloud metadata."""
     if not url or len(url) > 1000:
@@ -703,6 +729,48 @@ def api_extract_links():
         'extracted_count': result['extracted_count'],
         'direct_links': result['direct_links'],
         'logs': result.get('logs', [])
+    })
+
+
+@app.route('/api/community-link-results', methods=['POST'])
+def community_link_results():
+    """Accept a completed local extraction and save it against its exact DB game."""
+    body = request.get_json(silent=True) or {}
+    source_links = _normalized_url_set(body.get('source_links'))
+    direct_links = body.get('direct_links')
+
+    if not source_links or not isinstance(direct_links, list):
+        return jsonify({'success': False, 'error': 'source_links and direct_links are required.'}), 400
+    if len(source_links) != len(body.get('source_links', [])):
+        return jsonify({'success': False, 'error': 'Duplicate source links are not accepted.'}), 400
+    if len(direct_links) != len(source_links) or len(set(direct_links)) != len(direct_links):
+        return jsonify({'success': False, 'error': 'Every source part needs one unique direct link.'}), 400
+    if not all(isinstance(url, str) and _is_expected_direct_link(url) for url in direct_links):
+        return jsonify({'success': False, 'error': 'One or more direct links are invalid.'}), 400
+
+    matches = []
+    for game in firestore_db.get_all_cached_games():
+        game_sources = _normalized_url_set(game.get('fuckingfast_links', []))
+        if game_sources == source_links:
+            matches.append(game)
+
+    if len(matches) != 1:
+        message = 'No matching game was found for these source links.' if not matches else 'Source links match more than one game.'
+        return jsonify({'success': False, 'error': message}), 404 if not matches else 409
+
+    game = matches[0]
+    slug = game.get('slug')
+    if not slug:
+        return jsonify({'success': False, 'error': 'Matched game has no database identifier.'}), 500
+
+    if not firestore_db.update_game_links(slug, direct_links, total_parts=len(source_links)):
+        return jsonify({'success': False, 'error': 'Could not update the game database.'}), 503
+
+    return jsonify({
+        'success': True,
+        'slug': slug,
+        'game_title': game.get('title', slug),
+        'saved_links': len(direct_links),
     })
 
 @app.route('/api/job_status/<job_id>', methods=['GET'])
