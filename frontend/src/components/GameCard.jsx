@@ -1,14 +1,27 @@
 import React from 'react';
-import { Zap, Clock, HardDrive, CheckCircle2, Eye, ExternalLink } from 'lucide-react';
+import { Zap, Clock, HardDrive, CheckCircle2, Eye, ExternalLink, Flame } from 'lucide-react';
 import { formatCoverUrl } from '../utils/api';
 
 export default function GameCard({ game, onSelect, style }) {
     const isResolved = game.resolved;
-    const badgeClass = isResolved ? 'badge-available' : 'badge-unavailable';
-    const badgeIcon = isResolved ? <CheckCircle2 size={12} /> : <Clock size={12} />;
-    const badgeText = isResolved ? '1-Click Ready' : 'Links Pending';
-    const btnText = isResolved ? 'Instant Download' : 'View Details';
-    const btnIcon = isResolved ? <Zap size={14} /> : <Eye size={14} />;
+    const isRequested = !isResolved && Boolean(game.requested);
+    
+    let badgeClass = 'badge-unavailable';
+    let badgeIcon = <Clock size={12} />;
+    let badgeText = 'Links Pending';
+
+    if (isResolved) {
+        badgeClass = 'badge-available';
+        badgeIcon = <CheckCircle2 size={12} />;
+        badgeText = '1-Click Ready';
+    } else if (isRequested) {
+        badgeClass = 'badge-priority';
+        badgeIcon = <Flame size={12} />;
+        badgeText = 'Priority Queued';
+    }
+
+    const btnText = isResolved ? 'Instant Download' : (isRequested ? 'Priority In Queue' : 'View Details');
+    const btnIcon = isResolved ? <Zap size={14} /> : (isRequested ? <Flame size={14} /> : <Eye size={14} />);
 
     const coverUrl = formatCoverUrl(game.cover);
 

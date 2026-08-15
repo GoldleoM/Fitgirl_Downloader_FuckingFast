@@ -387,6 +387,7 @@ class HighSpeedGameResolver:
 def run_crawler(
     limit: Optional[int] = None,
     slug: Optional[str] = None,
+    priority_only: bool = False,
     concurrency: int = 1,
     delay: float = 1.2,
     cooldown: float = 60.0,
@@ -401,7 +402,8 @@ def run_crawler(
     if not firestore_db.is_firestore_connected():
         log.warning("Firestore not connected. Will read/write to local games_db.json fallback.")
 
-    unresolved_games = []
+    games_to_resolve = []
+
     if slug:
         game = firestore_db.get_game_by_slug(slug)
         if not game:
@@ -409,17 +411,53 @@ def run_crawler(
             return
         if game.get('resolved') and game.get('direct_links') and len(game.get('direct_links', [])) >= len(game.get('fuckingfast_links', [])):
             log.info(f"Game '{game.get('title')}' is already 100% resolved with {len(game['direct_links'])} links.")
-        unresolved_games = [game]
+        games_to_resolve = [game]
     else:
-        unresolved_games = firestore_db.get_unresolved_games(limit=limit)
+        # 1. First, check the High-Priority Request Queue
+        priority_games = firestore_db.get_priority_requested_games(limit=limit)
+        
+        if priority_games:
+            log.info(f"🎯 PRIORITY QUEUE ACTIVE: Found {len(priority_games)} user-requested game(s) awaiting links!")
+            for idx, pg in enumerate(priority_games, 1):
+                req_count = pg.get('request_count', 1)
+                log.info(f"   {idx}. ⚡ {pg.get('title', 'Unknown')} ({req_count} request{'s' if req_count != 1 else ''})")
+            
+            for g in priority_games:
+                g['_is_priority'] = True
+            games_to_resolve.extend(priority_games)
 
-    if not unresolved_games:
-        log.success("🎉 All games in the database already have direct download links! Nothing to resolve.")
+        # 2. If priority_only is NOT set, fill the remaining queue with standard unresolved games
+        if not priority_only:
+            remaining_limit = None
+            if limit:
+                remaining_limit = max(0, limit - len(games_to_resolve))
+                if remaining_limit == 0:
+                    pass  # Limit reached with priority games alone
+
+            if remaining_limit is None or remaining_limit > 0:
+                priority_slugs = {g.get('slug') for g in games_to_resolve if g.get('slug')}
+                normal_unresolved = firestore_db.get_unresolved_games(limit=remaining_limit, exclude_slugs=priority_slugs)
+                if not priority_games and normal_unresolved:
+                    log.info("🎯 Priority request queue is empty. Reading standard un-cached games from catalog...")
+                for g in normal_unresolved:
+                    g['_is_priority'] = False
+                games_to_resolve.extend(normal_unresolved)
+
+    if not games_to_resolve:
+        if priority_only:
+            log.success("🎉 Priority request queue is empty! No requested games waiting for links.")
+        else:
+            log.success("🎉 All games in the database already have direct download links! Nothing to resolve.")
         return
 
-    total_games = len(unresolved_games)
-    total_parts_all = sum(len(g.get('fuckingfast_links', [])) for g in unresolved_games)
-    log.info(f"Found {total_games} unresolved or partial games ({total_parts_all} total parts) in queue.")
+    total_games = len(games_to_resolve)
+    priority_count = sum(1 for g in games_to_resolve if g.get('_is_priority'))
+    total_parts_all = sum(len(g.get('fuckingfast_links', [])) for g in games_to_resolve)
+    
+    if priority_count > 0:
+        log.info(f"📋 Total Resolution Queue: {total_games} games ({priority_count} PRIORITY REQUESTS, {total_games - priority_count} standard | {total_parts_all} total parts)")
+    else:
+        log.info(f"📋 Total Resolution Queue: {total_games} unresolved/partial games ({total_parts_all} total parts)")
     log.info(f"Safe Config: Concurrency={concurrency} Tab(s) | Pace={delay}s Delay | Auto-Cooldown={cooldown}s")
 
     resolver = HighSpeedGameResolver(
@@ -434,7 +472,7 @@ def run_crawler(
     start_all = time.time()
 
     try:
-        for idx, game in enumerate(unresolved_games, start=1):
+        for idx, game in enumerate(games_to_resolve, start=1):
             if resolver.rate_limited or resolver.stop_event.is_set():
                 break
 
@@ -442,6 +480,8 @@ def run_crawler(
             game_slug = game.get('slug')
             raw_links: List[str] = game.get('fuckingfast_links', [])
             existing_dl: List[str] = game.get('direct_links', [])
+            is_priority = game.get('_is_priority', False)
+            req_count = game.get('request_count', 1)
 
             if not raw_links:
                 log.warning(f"[{idx}/{total_games}] Skipping '{title}'", "No links found in doc.")
@@ -451,8 +491,10 @@ def run_crawler(
             cached_parts = len(existing_dl) if existing_dl else 0
             needed_parts = max(0, total_parts - cached_parts)
             part_info = f"({total_parts} parts | {cached_parts} cached, {needed_parts} to resolve)" if cached_parts > 0 else f"({total_parts} parts)"
+            
+            prio_tag = f" 🎯 [PRIORITY REQUEST x{req_count}]" if is_priority else ""
             log.info("-" * 65)
-            log.info(f"🎮 [{idx}/{total_games}] Processing: '{title}' {part_info}")
+            log.info(f"🎮 [{idx}/{total_games}]{prio_tag} Processing: '{title}' {part_info}")
             log.info("-" * 65)
 
             direct_links = resolver.resolve_game(raw_links, game_title=title, existing_direct_links=existing_dl)
@@ -490,9 +532,10 @@ def run_crawler(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Rate-Limit Immune Link Resolver for Firestore")
+    parser = argparse.ArgumentParser(description="Rate-Limit Immune Link Resolver for Firestore (Priority Queue Enabled)")
     parser.add_argument("--slug", type=str, default=None, help="Resolve only a specific game by slug")
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of unresolved games to process")
+    parser.add_argument("--priority-only", action="store_true", help="Process ONLY user-requested priority games")
     parser.add_argument("--concurrency", type=int, default=1, help="Number of tabs (default: 1 for maximum rate-limit immunity)")
     parser.add_argument("--delay", type=float, default=1.2, help="Safe delay between requests in seconds (default: 1.2s)")
     parser.add_argument("--cooldown", type=float, default=60.0, help="Cooldown sleep in seconds when rate limited (default: 60.0s)")
@@ -502,6 +545,7 @@ if __name__ == "__main__":
     run_crawler(
         limit=args.limit,
         slug=args.slug,
+        priority_only=args.priority_only,
         concurrency=args.concurrency,
         delay=args.delay,
         cooldown=args.cooldown,

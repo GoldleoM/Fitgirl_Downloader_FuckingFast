@@ -343,13 +343,17 @@ def get_popular_repacks(page=1, per_page=16):
     }
 
 def get_game_details(game_url):
-    """Fetch full details, screenshots, description, metadata, and direct links for a game page."""
+    """Fetch full details, screenshots, description, system requirements, and direct links for a game page."""
     try:
         res = scraper.get(game_url, headers=HEADERS, timeout=20)
         if res.status_code != 200:
             return None
             
-        soup = BeautifulSoup(res.text, 'html.parser')
+        try:
+            soup = BeautifulSoup(res.text, 'lxml')
+        except Exception:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            
         content = soup.find('div', class_='entry-content') or soup
         
         # 1. Title
@@ -368,13 +372,23 @@ def get_game_details(game_url):
                 continue
             if src.startswith('//'):
                 src = 'https:' + src
-            # Check if screenshot host
             if any(h in src.lower() for h in ['riotpixels', 'imageban', 'fastpic', 'pixhost', 'imagetwist', 'postimg']):
-                # Upgrade riotpixels thumbnail to 720p high resolution
                 high_res = src.replace('.240p.jpg', '.720p.jpg').replace('http://', 'https://')
                 if high_res != cover and high_res not in raw_screenshots:
                     raw_screenshots.append(high_res)
                     
+        # Also check <a> tags for riotpixels screenshot links
+        for a in content.find_all('a', href=True):
+            href = a['href']
+            if 'riotpixels.com' in href and '/screenshots/' in href:
+                img = a.find('img')
+                if img:
+                    src = img.get('src') or img.get('data-src')
+                    if src:
+                        high_res = src.replace('.240p.jpg', '.720p.jpg').replace('http://', 'https://')
+                        if high_res != cover and high_res not in raw_screenshots:
+                            raw_screenshots.append(high_res)
+                            
         screenshots = [f"/api/image_proxy?url={s}" for s in raw_screenshots[:8]]
 
         # 4. Metadata (Genres, Companies, Languages, Sizes)
@@ -406,29 +420,65 @@ def get_game_details(game_url):
         if m_lang:
             languages = m_lang.group(1).strip()
             
-        # 5. Extract bullet point features
-        ul = content.find('ul')
-        if ul:
-            features = [li.text.strip() for li in ul.find_all('li')[:6]]
+        # 5. Extract Repack Features (ul list or section block)
+        for ul in content.find_all('ul'):
+            lis = [li.text.strip() for li in ul.find_all('li') if li.text.strip()]
+            if any('lossless' in li.lower() or 'md5 perfect' in li.lower() or 'selective download' in li.lower() or 'installation takes' in li.lower() for li in lis):
+                features = lis
+                break
+                
+        if not features:
+            m_feat = re.search(r'Repack Features\s*[\n\r]+(.*?)(?=Game Description|Game Features|Screenshots|Download Mirrors|Discussion|$)', full_text, re.DOTALL | re.IGNORECASE)
+            if m_feat:
+                raw_lines = [l.strip().lstrip('•-–* ') for l in m_feat.group(1).split('\n') if len(l.strip()) > 10]
+                features = raw_lines[:12]
 
         # 6. Extract Game Description / Story Overview
-        desc_paragraphs = []
-        found_desc = False
-        for elem in content.find_all(['p', 'div', 'h3']):
-            t = elem.text.strip()
-            if 'Game Description' in t:
-                found_desc = True
-                continue
-            if found_desc:
-                if any(stop in t.lower() for stop in ['download mirrors', 'repack features', 'selective download', 'direct links', 'torrent mirrors']):
-                    break
-                if len(t) > 30 and not any(k in t for k in ['Genres/Tags:', 'Companies:', 'Languages:', 'Original Size:', 'Repack Size:']):
-                    if t not in desc_paragraphs:
-                        desc_paragraphs.append(t)
-                        
-        description = '\n\n'.join(desc_paragraphs[:4]) if desc_paragraphs else ""
+        description = ""
+        
+        # Strategy A: Check Shortcodes Ultimate spoiler blocks (e.g. <div class="su-spoiler-title">Game Description</div>)
+        for spoiler in content.find_all('div', class_='su-spoiler'):
+            title_div = spoiler.find('div', class_='su-spoiler-title')
+            content_div = spoiler.find('div', class_='su-spoiler-content')
+            if title_div and 'game description' in title_div.text.lower() and content_div:
+                description = content_div.text.strip()
+                break
 
-        # 7. Extract FuckingFast links across entire document (including spoiler accordions)
+        # Strategy B: Traverse siblings after "Game Description" heading
+        if not description:
+            desc_header = None
+            for h in content.find_all(['h3', 'p', 'strong']):
+                if 'game description' in h.text.lower():
+                    desc_header = h
+                    break
+            if desc_header:
+                curr = desc_header.parent if desc_header.name == 'strong' else desc_header
+                desc_paras = []
+                for sib in curr.find_next_siblings():
+                    t = sib.text.strip()
+                    if any(stop in t.lower() for stop in ['game features', 'repack features', 'download mirrors', 'if you like what i do', 'post navigation']):
+                        break
+                    if len(t) > 25 and not any(k in t for k in ['Genres/Tags:', 'Companies:', 'Languages:', 'Original Size:', 'Repack Size:']):
+                        if t not in desc_paras:
+                            desc_paras.append(t)
+                    if len(desc_paras) >= 5:
+                        break
+                if desc_paras:
+                    description = '\n\n'.join(desc_paras)
+
+        # 7. Extract System Requirements (RAM, HDD space, Install time)
+        reqs = {}
+        m_ram = re.search(r'At least\s*([0-9]+\s*GB[^,\n\r]+RAM[^\.\n\r]*)', full_text, re.I)
+        if m_ram:
+            reqs['ram'] = m_ram.group(1).strip()
+        m_hdd = re.search(r'HDD space[^:]*:\s*([^\.\n\r]+)', full_text, re.I)
+        if m_hdd:
+            reqs['hdd'] = m_hdd.group(1).strip()
+        m_time = re.search(r'Installation takes\s*([^\.\n\r]+)', full_text, re.I)
+        if m_time:
+            reqs['install_time'] = m_time.group(1).strip()
+
+        # 8. Extract FuckingFast links across entire document (including spoiler accordions)
         fuckingfast_links = []
         all_a = content.find_all('a', href=True)
         for a in all_a:
@@ -449,6 +499,7 @@ def get_game_details(game_url):
             'repack_size': repack_size,
             'original_size': original_size,
             'features': features,
+            'requirements': reqs,
             'fuckingfast_links': fuckingfast_links,
             'parts_count': len(fuckingfast_links)
         }

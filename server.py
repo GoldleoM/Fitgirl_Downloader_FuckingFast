@@ -301,12 +301,18 @@ def _enrich_game_with_db_status(item):
         item['repack_size'] = db_game.get('repack_size') or item.get('repack_size', 'N/A')
         item['original_size'] = db_game.get('original_size') or item.get('original_size', 'N/A')
         item['genres'] = db_game.get('genres') or item.get('genres', '')
+        item['requested'] = bool(db_game.get('requested', False))
+        item['request_count'] = db_game.get('request_count', 0)
+        item['requested_at'] = db_game.get('requested_at')
         if db_game.get('cover') and db_game['cover'] != 'None':
             item['cover'] = db_game['cover']
     else:
         item['resolved'] = False
         item['direct_links_count'] = 0
         item['repack_size'] = item.get('repack_size', 'N/A')
+        item['requested'] = False
+        item['request_count'] = 0
+        item['requested_at'] = None
 
     if not item.get('cover') or item['cover'] == 'None':
         if url:
@@ -504,6 +510,54 @@ def api_game():
             
     return jsonify({'success': False, 'error': 'Could not fetch game details'}), 404
 
+@app.route('/api/request_game', methods=['POST'])
+def api_request_game():
+    """Queues an unresolved game into the high-priority resolution queue."""
+    data = request.json or {}
+    game_slug = (data.get('slug') or '').strip()
+    game_url = (data.get('url') or data.get('game_url') or '').strip()
+    game_title = (data.get('title') or data.get('game_title') or '').strip()
+
+    if not game_slug and game_url:
+        game_slug = _generate_slug(game_url, game_title)
+    if not game_slug and game_title:
+        game_slug = _generate_slug('', game_title)
+
+    if not game_slug:
+        return jsonify({'success': False, 'error': 'Missing game slug or title/URL'}), 400
+
+    # If game details or raw links aren't cached yet, fetch them from FitGirl
+    existing = firestore_db.get_game_by_slug(game_slug)
+    if (not existing or not existing.get('fuckingfast_links')) and game_url:
+        try:
+            details = fitgirl_scraper.get_game_details(game_url)
+            if details and details.get('fuckingfast_links'):
+                details['slug'] = game_slug
+                details['resolved'] = False
+                details['direct_links'] = []
+                firestore_db.upsert_game(details)
+        except Exception as e:
+            print(f"[RequestGame] Error scraping details for {game_url}: {e}")
+
+    result = firestore_db.request_game(game_slug, title=game_title, url=game_url)
+    return jsonify({
+        'success': True,
+        'message': f"'{result.get('title', game_slug)}' added to priority extraction queue!",
+        'data': result
+    })
+
+@app.route('/api/priority_queue', methods=['GET'])
+def api_priority_queue():
+    """Returns currently pending priority requested games."""
+    limit = request.args.get('limit', 50, type=int)
+    priority_games = firestore_db.get_priority_requested_games(limit=limit)
+    enriched = [_enrich_game_with_db_status(g) for g in priority_games]
+    return jsonify({
+        'success': True,
+        'count': len(enriched),
+        'games': enriched
+    })
+
 @app.route('/api/db_stats', methods=['GET'])
 def api_db_stats():
     """Returns overview of Firestore database status."""
@@ -512,11 +566,13 @@ def api_db_stats():
     items = all_games.get('items', [])
     total = len(items)
     resolved = sum(1 for g in items if g.get('resolved') and g.get('direct_links'))
+    priority_list = firestore_db.get_priority_requested_games()
     return jsonify({
         'firestore_connected': is_connected,
         'total_games': total,
         'resolved_games': resolved,
-        'pending_games': max(0, total - resolved)
+        'pending_games': max(0, total - resolved),
+        'priority_queue_count': len(priority_list)
     })
 
 @app.route('/api/start_download', methods=['POST'])

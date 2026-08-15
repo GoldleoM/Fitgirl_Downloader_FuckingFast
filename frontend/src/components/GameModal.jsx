@@ -23,7 +23,8 @@ import {
     BookOpen,
     Building2,
     Languages,
-    Tag
+    Tag,
+    Cpu
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
 
@@ -95,6 +96,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const companies = activeGame.companies || '';
     const languages = activeGame.languages || '';
     const features = activeGame.features || [];
+    const requirements = activeGame.requirements || {};
 
     const handleCopyRawLinks = async () => {
         if (!rawLinks || rawLinks.length === 0) return;
@@ -321,6 +323,36 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                 )}
                             </ul>
                         </div>
+
+                        {/* Repack & System Hardware Requirements */}
+                        {(requirements.ram || requirements.hdd || requirements.install_time) && (
+                            <div className="hub-section reqs-section">
+                                <h4 className="hub-section-title">
+                                    <Cpu size={15} className="text-neon" />
+                                    <span>System &amp; Hardware Requirements</span>
+                                </h4>
+                                <div className="hub-reqs-grid">
+                                    {requirements.ram && (
+                                        <div className="req-card">
+                                            <span className="req-label"><Zap size={12} className="text-cyan" /> Minimum Installer RAM</span>
+                                            <span className="req-val">{requirements.ram}</span>
+                                        </div>
+                                    )}
+                                    {requirements.hdd && (
+                                        <div className="req-card">
+                                            <span className="req-label"><HardDrive size={12} className="text-purple" /> Storage Space After Install</span>
+                                            <span className="req-val">{requirements.hdd}</span>
+                                        </div>
+                                    )}
+                                    {requirements.install_time && (
+                                        <div className="req-card full-width">
+                                            <span className="req-label"><Clock size={12} className="text-amber" /> Estimated Installation Time</span>
+                                            <span className="req-val">{requirements.install_time}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Action Buttons Hub */}
                         <div className="hub-actions-container">

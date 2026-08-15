@@ -213,10 +213,114 @@ def get_game_by_slug(slug: str) -> Optional[Dict[str, Any]]:
     return local_data.get('games', {}).get(slug)
 
 
-def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
+def request_game(slug: str, title: str = "", url: str = "") -> Dict[str, Any]:
+    """
+    Flags a game as requested by a user and puts it into the high-priority resolution queue.
+    Increments request_count and timestamps the request.
+    """
+    now_iso = datetime.utcnow().isoformat() + 'Z'
+    existing = get_game_by_slug(slug)
+    
+    current_count = (existing.get('request_count') or 0) if existing else 0
+    new_count = current_count + 1
+
+    update_payload = {
+        'requested': True,
+        'requested_at': now_iso,
+        'request_count': new_count,
+        'updated_at': now_iso
+    }
+
+    if not existing:
+        # Create minimal stub if not yet in database
+        if not title:
+            title = slug.replace('-', ' ').title()
+        update_payload.update({
+            'slug': slug,
+            'title': title,
+            'url': url or '',
+            'resolved': False,
+            'direct_links': [],
+            'fuckingfast_links': [],
+            'created_at': now_iso
+        })
+
+    # 1. Update local DB
+    local_data = _load_local_db()
+    if slug in local_data.get('games', {}):
+        local_data['games'][slug].update(update_payload)
+    else:
+        local_data.setdefault('games', {})[slug] = update_payload
+    _save_local_db(local_data)
+
+    # 2. Update Firestore
+    db = init_firestore()
+    if db:
+        try:
+            doc_ref = db.collection('games').document(slug)
+            doc_ref.set(update_payload, merge=True)
+        except Exception as e:
+            print(f"[Firestore] Error requesting game '{slug}': {e}")
+
+    merged = {**(existing or {}), **update_payload}
+    return {
+        'success': True,
+        'slug': slug,
+        'title': merged.get('title', title),
+        'requested': True,
+        'request_count': new_count,
+        'requested_at': now_iso
+    }
+
+
+def get_priority_requested_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Returns games that have been requested by users (requested == True or request_count > 0)
+    and are not yet fully resolved. Ordered by request_count DESC, then requested_at ASC.
+    """
+    requested_games = []
+    db = init_firestore()
+    if db:
+        try:
+            docs = db.collection('games').stream()
+            for doc in docs:
+                data = doc.to_dict()
+                is_req = data.get('requested', False) or (data.get('request_count', 0) > 0)
+                ff_links = data.get('fuckingfast_links') or []
+                dl_links = data.get('direct_links') or []
+                is_resolved = data.get('resolved', False)
+
+                # Prioritize if requested and unresolved/partially resolved
+                if is_req and ff_links and (not is_resolved or len(dl_links) < len(ff_links)):
+                    requested_games.append(data)
+        except Exception as e:
+            print(f"[Firestore] Error querying priority requested games: {e}")
+
+    if not requested_games:
+        local_data = _load_local_db()
+        for slug, game in local_data.get('games', {}).items():
+            is_req = game.get('requested', False) or (game.get('request_count', 0) > 0)
+            ff_links = game.get('fuckingfast_links') or []
+            dl_links = game.get('direct_links') or []
+            is_resolved = game.get('resolved', False)
+
+            if is_req and ff_links and (not is_resolved or len(dl_links) < len(ff_links)):
+                requested_games.append(game)
+
+    # Sort: highest request_count first, then earliest requested_at
+    requested_games.sort(key=lambda g: (-g.get('request_count', 1), g.get('requested_at', '9999')))
+
+    if limit:
+        return requested_games[:limit]
+    return requested_games
+
+
+def get_unresolved_games(limit: Optional[int] = None, exclude_slugs: Optional[set] = None) -> List[Dict[str, Any]]:
     """
     Returns games that have 'fuckingfast_links' but are unresolved or partially resolved (len(direct_links) < len(fuckingfast_links)).
+    Optionally skips any slugs present in `exclude_slugs`.
     """
+    exclude = exclude_slugs or set()
     unresolved = []
     db = init_firestore()
     if db:
@@ -225,6 +329,9 @@ def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
             docs = db.collection('games').stream()
             for doc in docs:
                 data = doc.to_dict()
+                slug = data.get('slug')
+                if slug and slug in exclude:
+                    continue
                 ff_links = data.get('fuckingfast_links') or []
                 dl_links = data.get('direct_links') or []
                 is_resolved = data.get('resolved', False)
@@ -241,6 +348,8 @@ def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     # Fallback to local DB
     local_data = _load_local_db()
     for slug, game in local_data.get('games', {}).items():
+        if slug in exclude:
+            continue
         ff_links = game.get('fuckingfast_links') or []
         dl_links = game.get('direct_links') or []
         is_resolved = game.get('resolved', False)
