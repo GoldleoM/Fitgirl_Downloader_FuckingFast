@@ -4,46 +4,66 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
-    <title>FitBoy - High-Speed Game Repack Downloader</title>
+    <title>FitBoy — High-Speed Game Repack Vault & Direct Downloader</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.4.0">
+    <link rel="stylesheet" href="styles.css?v=3.0.0">
 </head>
 <body>
 
-    <div class="glow-bg"></div>
+    <!-- Ambient Ambient Glow Backdrop -->
+    <div class="glow-bg">
+        <div class="ambient-orb orb-1"></div>
+        <div class="ambient-orb orb-2"></div>
+        <div class="ambient-orb orb-3"></div>
+        <div class="ambient-grid-overlay"></div>
+    </div>
 
     <!-- Header Navigation -->
     <header class="navbar">
         <div class="logo-container" id="brandLogo" title="Back to Popular Repacks (Home)">
-            <div class="logo-icon">
-                <i class="fa-solid fa-bolt"></i>
+            <div class="logo-icon-wrapper">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-bolt-lightning"></i>
+                </div>
+                <span class="logo-pulse"></span>
             </div>
             <div class="logo-text">
-                <span class="brand-title">FIT<span class="highlight">BOY</span></span>
+                <span class="brand-title">FIT<span class="highlight">BOY</span> <span class="brand-badge">PRO</span></span>
                 <span class="brand-sub">HIGH-SPEED REPACK VAULT</span>
             </div>
         </div>
 
+        <!-- Command-Bar Style Search Box -->
         <div class="search-box">
             <i class="fa-solid fa-magnifying-glass search-icon"></i>
-            <input type="text" id="searchInput" placeholder="Search games... (e.g. Black Myth Wukong, Cyberpunk, GTA V)" autocomplete="off">
-            <button id="searchBtn" class="btn-search">Search</button>
+            <input type="text" id="searchInput" placeholder="Search repacks... (e.g. Wukong, Cyberpunk, GTA V, Elden Ring)" autocomplete="off" spellcheck="false">
+            <div class="search-actions">
+                <button id="searchClearBtn" class="search-clear-btn hidden" title="Clear search"><i class="fa-solid fa-xmark"></i></button>
+                <kbd class="search-shortcut-hint" title="Press Ctrl+K or / to search">Ctrl K</kbd>
+                <button id="searchBtn" class="btn-search">
+                    <span>Search</span>
+                    <i class="fa-solid fa-arrow-right-long"></i>
+                </button>
+            </div>
             <div id="searchSuggestions" class="search-suggestions hidden"></div>
         </div>
 
-        <div class="fdm-status-badge">
-            <div class="status-dot online"></div>
-            <i class="fa-solid fa-bolt"></i>
-            <span>FitBoy Ready</span>
+        <!-- Status Badges -->
+        <div class="nav-status-group">
+            <div class="fdm-status-badge">
+                <div class="status-pulse-dot"></div>
+                <i class="fa-solid fa-database"></i>
+                <span>Cloud Vault Ready</span>
+            </div>
         </div>
     </header>
 
@@ -53,47 +73,82 @@
         <!-- Hero Section -->
         <section class="hero-banner">
             <div class="hero-content">
-                <span class="hero-tag"><i class="fa-solid fa-bolt"></i> HIGH-SPEED DIRECT REPACKS</span>
-                <h1>Browse Repacks. Direct Links. Powered by <span class="gradient-text">FitBoy</span>.</h1>
-                <p>Instant 1-click direct download links for popular repacks, plus standalone local extraction with zero setup.</p>
+                <div class="hero-tag-pill">
+                    <span class="tag-glow-dot"></span>
+                    <i class="fa-solid fa-bolt-lightning"></i>
+                    <span>ULTRA-FAST MULTI-PART DOWNLOADS</span>
+                </div>
+                <h1 class="hero-heading">
+                    Explore Repacks. Instant Direct Links. <br class="hero-br">
+                    Powered by <span class="gradient-text">FitBoy Vault</span>.
+                </h1>
+                <p class="hero-description">
+                    Zero-wait 1-click cloud-extracted direct download links for top repack releases, with seamless batch support for FDM, JDownloader 2, IDM, and aria2c.
+                </p>
             </div>
+
             <div class="hero-stats">
                 <div class="stat-card">
-                    <span class="stat-num" id="statGames">3,200+</span>
-                    <span class="stat-label">Repacks Catalog</span>
+                    <div class="stat-icon-box cyan">
+                        <i class="fa-solid fa-gamepad"></i>
+                    </div>
+                    <div class="stat-text-group">
+                        <span class="stat-num" id="statGames">3,200+</span>
+                        <span class="stat-label">Verified Repacks</span>
+                    </div>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-num">FuckingFast</span>
-                    <span class="stat-label">Direct Mirror Host</span>
+                    <div class="stat-icon-box purple">
+                        <i class="fa-solid fa-bolt"></i>
+                    </div>
+                    <div class="stat-text-group">
+                        <span class="stat-num">FuckingFast</span>
+                        <span class="stat-label">Direct Mirror Host</span>
+                    </div>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-num">Standalone .EXE</span>
-                    <span class="stat-label">Local Link Extractor</span>
+                    <div class="stat-icon-box emerald">
+                        <i class="fa-solid fa-microchip"></i>
+                    </div>
+                    <div class="stat-text-group">
+                        <span class="stat-num">0ms Cache</span>
+                        <span class="stat-label">Instant Cloud Links</span>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Catalog Header -->
+        <!-- Catalog Header & Mode Switcher -->
         <div class="section-header">
-            <h2 id="catalogTitle"><i class="fa-solid fa-fire"></i> Top Repacks of the Year</h2>
+            <div class="section-title-wrap">
+                <h2 id="catalogTitle"><i class="fa-solid fa-fire text-neon"></i> Top Repacks of the Year</h2>
+            </div>
             <div class="catalog-filters">
-                <button class="filter-btn active" id="btnPopular"><i class="fa-solid fa-fire"></i> Top Repacks of the Year</button>
-                <button class="filter-btn" id="btnLatest"><i class="fa-solid fa-clock"></i> Latest Repacks</button>
+                <button class="filter-btn active" id="btnPopular">
+                    <i class="fa-solid fa-fire"></i>
+                    <span>Top Repacks</span>
+                </button>
+                <button class="filter-btn" id="btnLatest">
+                    <i class="fa-solid fa-clock"></i>
+                    <span>Latest Releases</span>
+                </button>
             </div>
         </div>
 
         <!-- Category & Filter Menus -->
         <section class="category-section">
-            <!-- Genre & Franchise Tag Chips -->
-            <div class="category-chips-wrapper">
-                <button class="category-chip active" data-genre="all"><i class="fa-solid fa-gamepad"></i> All Games</button>
-                <button class="category-chip" data-genre="action"><i class="fa-solid fa-crosshairs"></i> Action & Shooter</button>
-                <button class="category-chip" data-genre="rpg"><i class="fa-solid fa-wand-magic-sparkles"></i> RPG & Open World</button>
-                <button class="category-chip" data-genre="horror"><i class="fa-solid fa-ghost"></i> Horror & Survival</button>
-                <button class="category-chip" data-genre="racing"><i class="fa-solid fa-car-side"></i> Racing & Sports</button>
-                <button class="category-chip" data-genre="strategy"><i class="fa-solid fa-chess-knight"></i> Strategy & Sim</button>
-                <button class="category-chip" data-genre="indie"><i class="fa-solid fa-shapes"></i> Indie & Co-Op</button>
-                <button class="category-chip" data-genre="anime"><i class="fa-solid fa-dragon"></i> Anime & JRPG</button>
+            <!-- Genre Capsules Carousel -->
+            <div class="category-chips-scroll-container">
+                <div class="category-chips-wrapper">
+                    <button class="category-chip active" data-genre="all"><i class="fa-solid fa-shapes"></i> All Games</button>
+                    <button class="category-chip" data-genre="action"><i class="fa-solid fa-crosshairs"></i> Action & Shooter</button>
+                    <button class="category-chip" data-genre="rpg"><i class="fa-solid fa-wand-magic-sparkles"></i> RPG & Open World</button>
+                    <button class="category-chip" data-genre="horror"><i class="fa-solid fa-ghost"></i> Horror & Survival</button>
+                    <button class="category-chip" data-genre="racing"><i class="fa-solid fa-car-side"></i> Racing & Sports</button>
+                    <button class="category-chip" data-genre="strategy"><i class="fa-solid fa-chess-knight"></i> Strategy & Sim</button>
+                    <button class="category-chip" data-genre="indie"><i class="fa-solid fa-puzzle-piece"></i> Indie & Co-Op</button>
+                    <button class="category-chip" data-genre="anime"><i class="fa-solid fa-dragon"></i> Anime & JRPG</button>
+                </div>
             </div>
 
             <!-- Sub Filter Controls Bar (Mode, Size, Direct Links, Reset) -->
@@ -102,8 +157,8 @@
                     <span class="filter-group-title"><i class="fa-solid fa-network-wired"></i> Mode:</span>
                     <div class="pill-group" id="filterModeGroup">
                         <button class="filter-pill active" data-mode="all">All</button>
-                        <button class="filter-pill" data-mode="offline"><i class="fa-solid fa-user"></i> Offline / Story</button>
-                        <button class="filter-pill" data-mode="online"><i class="fa-solid fa-users"></i> Online / Multi</button>
+                        <button class="filter-pill" data-mode="offline"><i class="fa-solid fa-user"></i> Story / Offline</button>
+                        <button class="filter-pill" data-mode="online"><i class="fa-solid fa-users"></i> Online / Co-Op</button>
                     </div>
                 </div>
 
@@ -138,10 +193,16 @@
 
         <!-- Games Grid -->
         <div id="gamesGrid" class="games-grid">
-            <!-- Dynamic JS injection -->
-            <div class="loading-spinner">
-                <div class="spinner"></div>
-                <p>Fetching FitBoy Repacks catalog...</p>
+            <!-- Dynamic JS Injection with Skeleton Loaders -->
+            <div class="skeleton-grid">
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
+                <div class="skeleton-card"><div class="skeleton-thumb shimmer"></div><div class="skeleton-line title shimmer"></div><div class="skeleton-line subtitle shimmer"></div><div class="skeleton-line btn shimmer"></div></div>
             </div>
         </div>
 
@@ -157,7 +218,7 @@
     <!-- Game Modal -->
     <div id="gameModal" class="modal-overlay hidden">
         <div class="modal-content glass-card">
-            <button id="closeModal" class="close-btn">&times;</button>
+            <button id="closeModal" class="close-btn" title="Close dialog"><i class="fa-solid fa-xmark"></i></button>
             <div class="modal-body" id="modalBody">
                 <!-- Injected via JS -->
             </div>
@@ -169,15 +230,18 @@
         <div class="drawer-content glass-card">
             <div class="drawer-header">
                 <div class="drawer-title">
-                    <i class="fa-solid fa-cloud-arrow-down icon-pulse"></i>
+                    <div class="drawer-header-icon">
+                        <i class="fa-solid fa-cloud-arrow-down icon-pulse"></i>
+                    </div>
                     <div>
                         <h3 id="drawerGameTitle">Extracting Game Links...</h3>
                         <span id="drawerStatusText" class="drawer-subtitle">Initializing pipeline...</span>
                     </div>
                 </div>
-                <button id="closeDrawer" class="close-btn">&times;</button>
+                <button id="closeDrawer" class="close-btn" title="Close drawer"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
+            <!-- Progress HUD -->
             <div class="progress-stats-banner">
                 <div class="stats-row">
                     <span id="progressCounter" class="progress-counter-text">0 / 0 Parts Extracted</span>
@@ -189,19 +253,23 @@
                 <div id="currentPartText" class="current-part-text"><i class="fa-solid fa-spinner fa-spin"></i> Starting extraction pipeline...</div>
             </div>
 
+            <!-- Monospace Terminal Log Box -->
             <div class="activity-logs-box" id="terminalLogs">
                 <div class="log-line text-muted">> Initializing extraction process...</div>
             </div>
 
             <div class="drawer-actions">
                 <button id="copyClipboardBtn" class="btn-primary glow-btn" disabled>
-                    <i class="fa-solid fa-copy"></i> Copy URLs
+                    <i class="fa-solid fa-copy"></i>
+                    <span>Copy URLs</span>
                 </button>
                 <button id="downloadTxtBtn" class="btn-secondary" disabled>
-                    <i class="fa-solid fa-file-arrow-down"></i> Save links.txt
+                    <i class="fa-solid fa-file-arrow-down"></i>
+                    <span>Save links.txt</span>
                 </button>
                 <button id="browserBatchBtn" class="btn-secondary" disabled>
-                    <i class="fa-solid fa-browser"></i> Download in Browser
+                    <i class="fa-solid fa-globe"></i>
+                    <span>Download in Browser</span>
                 </button>
             </div>
 
@@ -209,11 +277,11 @@
             <div class="guide-card glass-subcard">
                 <div class="guide-header">
                     <i class="fa-solid fa-circle-info"></i>
-                    <span>How to Download extracted parts with your tool of choice</span>
+                    <span>How to download extracted parts with your manager of choice</span>
                 </div>
                 
                 <div class="guide-tabs">
-                    <button class="guide-tab active" data-tab="fdm"><i class="fa-solid fa-download"></i> FDM</button>
+                    <button class="guide-tab active" data-tab="fdm"><i class="fa-solid fa-download"></i> Free Download Manager</button>
                     <button class="guide-tab" data-tab="jdownloader"><i class="fa-solid fa-cubes"></i> JDownloader 2</button>
                     <button class="guide-tab" data-tab="idm"><i class="fa-solid fa-bolt"></i> IDM</button>
                     <button class="guide-tab" data-tab="cli"><i class="fa-solid fa-terminal"></i> aria2 / CLI</button>
@@ -225,14 +293,14 @@
                             <div class="step-badge"><i class="fa-solid fa-1"></i> Step 1</div>
                             <p class="step-desc">Click <strong>Copy URLs</strong> above. In FDM, click the <strong>Main Menu</strong> (three lines <i class="fa-solid fa-bars"></i>).</p>
                             <div class="img-wrapper">
-                                <img src="images/fdm_step1.png" alt="Click main menu three lines icon in FDM">
+                                <img src="images/fdm_step1.png" alt="Click main menu three lines icon in FDM" onerror="this.style.display='none'">
                             </div>
                         </div>
                         <div class="step-card">
                             <div class="step-badge"><i class="fa-solid fa-2"></i> Step 2</div>
-                            <p class="step-desc">Click <strong>Paste urls from clipboard</strong> in the menu to add all parts.</p>
+                            <p class="step-desc">Click <strong>Paste urls from clipboard</strong> in the menu to add all parts automatically.</p>
                             <div class="img-wrapper">
-                                <img src="images/fdm_step2.png" alt="Click Paste urls from clipboard option in FDM">
+                                <img src="images/fdm_step2.png" alt="Click Paste urls from clipboard option in FDM" onerror="this.style.display='none'">
                             </div>
                         </div>
                     </div>
@@ -240,33 +308,33 @@
 
                 <div class="tab-content hidden" id="tab-jdownloader">
                     <div class="guide-text-box">
-                        <p><strong>JDownloader 2 Setup:</strong></p>
+                        <p class="guide-section-title"><strong>JDownloader 2 Quick Setup:</strong></p>
                         <ol class="guide-list">
-                            <li>Click <strong>Copy URLs</strong> above. JDownloader 2 auto-grabs clipboard links instantly!</li>
-                            <li>Or click <strong>Save links.txt</strong>, then in JDownloader 2 go to <code>File -> Add Links -> Load Text File</code>.</li>
-                            <li>Click <strong>Start All Downloads</strong> in JDownloader 2.</li>
+                            <li>Click <strong>Copy URLs</strong> above. JDownloader 2's LinkGrabber will capture clipboard URLs instantly.</li>
+                            <li>Alternatively, click <strong>Save links.txt</strong>, then in JDownloader 2 navigate to <code>File -> Add Links -> Load Text File</code>.</li>
+                            <li>Click <strong>Start All Downloads</strong> in JDownloader 2 to begin simultaneous multithreaded downloads.</li>
                         </ol>
                     </div>
                 </div>
 
                 <div class="tab-content hidden" id="tab-idm">
                     <div class="guide-text-box">
-                        <p><strong>Internet Download Manager (IDM) Setup:</strong></p>
+                        <p class="guide-section-title"><strong>Internet Download Manager (IDM) Setup:</strong></p>
                         <ol class="guide-list">
                             <li>Click <strong>Copy URLs</strong> above. Open IDM and select <code>Tasks -> Add batch download from clipboard</code>.</li>
                             <li>Or click <strong>Save links.txt</strong>, then in IDM go to <code>File -> Import -> From text file</code>.</li>
-                            <li>Select all files and click <strong>OK</strong> to start downloading all parts simultaneously.</li>
+                            <li>Select all files and click <strong>OK</strong> to queue and start downloading all parts simultaneously.</li>
                         </ol>
                     </div>
                 </div>
 
                 <div class="tab-content hidden" id="tab-cli">
                     <div class="guide-text-box">
-                        <p><strong>aria2c / Command Line Setup:</strong></p>
+                        <p class="guide-section-title"><strong>aria2c / Command Line Setup:</strong></p>
                         <ol class="guide-list">
-                            <li>Click <strong>Save links.txt</strong> to save the file.</li>
-                            <li>Run aria2c in your terminal for ultra-fast multi-threaded downloads:</li>
-                            <code class="code-block">aria2c -i download_links.txt -j 4 -x 16</code>
+                            <li>Click <strong>Save links.txt</strong> to download the URL list.</li>
+                            <li>Run aria2c in your terminal for ultra-fast multi-connection downloads:</li>
+                            <pre class="code-block"><code>aria2c -i download_links.txt -j 4 -x 16 -k 1M</code></pre>
                         </ol>
                     </div>
                 </div>
@@ -274,6 +342,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=2.4.0" defer></script>
+    <!-- App Script -->
+    <script src="app.js?v=3.0.0" defer></script>
 </body>
 </html>

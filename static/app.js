@@ -1389,9 +1389,56 @@ function initApp() {
     // Initialize hidden state
     hideSuggestions();
 
+    const searchClearBtn = document.getElementById('searchClearBtn');
+
+    function updateSearchClearBtn() {
+        if (!searchClearBtn || !searchInput) return;
+        if (searchInput.value.trim().length > 0) {
+            searchClearBtn.classList.remove('hidden');
+        } else {
+            searchClearBtn.classList.add('hidden');
+        }
+    }
+
+    if (searchClearBtn) {
+        searchClearBtn.addEventListener('click', () => {
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.focus();
+            }
+            updateSearchClearBtn();
+            hideSuggestions();
+            if (isFilterActive) {
+                applyActiveFilters(1);
+            } else if (currentMode === 'latest') {
+                loadCatalog(1);
+            } else {
+                loadPopular(1);
+            }
+        });
+    }
+
+    // Global keyboard shortcut for search (Ctrl+K / Cmd+K or /)
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        } else if (e.key === '/' && document.activeElement !== searchInput && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+            e.preventDefault();
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        }
+    });
+
     // Search Input Event Listeners
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
+            updateSearchClearBtn();
             const val = e.target.value.trim();
             if (val.length < 2) {
                 hideSuggestions();
@@ -1456,7 +1503,10 @@ function initApp() {
     const brandLogo = document.getElementById('brandLogo') || document.querySelector('.logo-container');
     if (brandLogo) {
         brandLogo.addEventListener('click', () => {
-            if (searchInput) searchInput.value = '';
+            if (searchInput) {
+                searchInput.value = '';
+                updateSearchClearBtn();
+            }
             hideSuggestions();
             if (btnPopular) btnPopular.classList.add('active');
             if (btnLatest) btnLatest.classList.remove('active');
@@ -1860,18 +1910,28 @@ function initApp() {
         });
     }
 
+    function renderSkeletonsHtml(count = 8) {
+        return `
+            <div class="skeleton-grid">
+                ${Array.from({ length: count }).map(() => `
+                    <div class="skeleton-card">
+                        <div class="skeleton-thumb shimmer"></div>
+                        <div class="skeleton-line title shimmer"></div>
+                        <div class="skeleton-line subtitle shimmer"></div>
+                        <div class="skeleton-line btn shimmer"></div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
     async function loadPopular(page = 1, isRetry = false) {
         currentMode = 'popular';
         if (btnPopular) btnPopular.classList.add('active');
         if (btnLatest) btnLatest.classList.remove('active');
 
-        catalogTitle.innerHTML = `<i class="fa-solid fa-fire"></i> Top Repacks of the Year (Page ${page})`;
-        gamesGrid.innerHTML = `
-            <div class="loading-spinner">
-                <div class="spinner"></div>
-                <p>Loading Top 150 Repacks of the Year (Page ${page})...</p>
-            </div>
-        `;
+        catalogTitle.innerHTML = `<i class="fa-solid fa-fire text-neon"></i> Top Repacks of the Year (Page ${page})`;
+        gamesGrid.innerHTML = renderSkeletonsHtml(8);
         try {
             const res = await apiFetch(`/api/popular?page=${page}&per_page=16`);
             const data = await res.json();
@@ -1896,7 +1956,7 @@ function initApp() {
             if (!isRetry) {
                 setTimeout(() => loadPopular(page, true), 1200);
             } else {
-                gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: red;">Failed to load popular repacks.</p>`;
+                gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--accent-danger);">Failed to load popular repacks.</p>`;
             }
         }
     }
@@ -1906,13 +1966,8 @@ function initApp() {
         if (btnLatest) btnLatest.classList.add('active');
         if (btnPopular) btnPopular.classList.remove('active');
 
-        catalogTitle.innerHTML = `<i class="fa-solid fa-clock"></i> Latest Repacks (Page ${page})`;
-        gamesGrid.innerHTML = `
-            <div class="loading-spinner">
-                <div class="spinner"></div>
-                <p>Loading Latest Repacks (Page ${page})...</p>
-            </div>
-        `;
+        catalogTitle.innerHTML = `<i class="fa-solid fa-clock text-neon"></i> Latest Repacks (Page ${page})`;
+        gamesGrid.innerHTML = renderSkeletonsHtml(8);
         try {
             const res = await apiFetch(`/api/catalog?page=${page}`);
             const data = await res.json();
@@ -1921,7 +1976,7 @@ function initApp() {
                 renderPagination(page, 10);
             }
         } catch (e) {
-            gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: red;">Failed to load catalog from server.</p>`;
+            gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--accent-danger);">Failed to load catalog from server.</p>`;
         }
     }
 
@@ -1933,13 +1988,8 @@ function initApp() {
         }
 
         if (paginationContainer) paginationContainer.classList.add('hidden');
-        catalogTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> Search Results for "${query}"`;
-        gamesGrid.innerHTML = `
-            <div class="loading-spinner">
-                <div class="spinner"></div>
-                <p>Searching FitGirl Repacks library...</p>
-            </div>
-        `;
+        catalogTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass text-neon"></i> Search Results for "${query}"`;
+        gamesGrid.innerHTML = renderSkeletonsHtml(8);
 
         try {
             const res = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
@@ -1948,7 +1998,7 @@ function initApp() {
                 renderGames(data.results);
             }
         } catch (e) {
-            gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: red;">Search request failed.</p>`;
+            gamesGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--accent-danger);">Search request failed.</p>`;
         }
     }
 
@@ -1979,7 +2029,7 @@ function initApp() {
                 <img class="card-poster" src="${formatCoverUrl(game.cover)}" alt="${game.title}" loading="lazy" onerror="this.onerror=null; this.src='/static/images/placeholder.svg';">
                 <div class="card-content">
                     <h3 class="card-title">${game.title}</h3>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <div class="card-meta-row">
                         <span class="card-date" title="Repack Details">${sizeDisplay}</span>
                         ${statusBadge}
                     </div>
@@ -2091,8 +2141,8 @@ function initApp() {
                                     <button id="copyRawLinksBtn" class="btn-primary glow-btn" data-title="${g.title}">
                                         <i class="fa-solid fa-copy"></i> Copy Raw FuckingFast Links (${partsCount} Parts)
                                     </button>
-                                    <a href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/tag/v1.0.1" target="_blank" rel="noopener noreferrer" class="btn-accent-download">
-                                        <i class="fa-brands fa-github"></i> Download Local Extractor (.exe)
+                                    <a href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/download/v1.0.1/FitGirl_Link_Extractor.exe" target="_blank" rel="noopener noreferrer" class="btn-accent-download">
+                                        <i class="fa-solid fa-download"></i> Download Local Extractor (.exe)
                                     </a>
                                 `}
                                 <a href="${g.url}" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-fitgirl-modal">

@@ -1,16 +1,48 @@
-.vercel
-__pycache__/
-*.pyc
+# Build and Output
+dist/
+*/dist/
+.vercel/
 .firebase/
+build/
+
+# Node & Dependencies
 node_modules/
-* - Copy*
-*- Copy*
+*/node_modules/
+package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python & Caching
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Sensitive & Secret Files
 serviceAccountKey.json
 *serviceAccount*.json
 firebase-key.json
 *.local.json
-games_db.json
 .env
 *.env
 .env.*
+.env.local
 
+# Databases & Local state
+games_db.json
+*.sqlite
+*.db
+
+# Temporary & Duplicates
+* - Copy*
+*- Copy*
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db

@@ -215,20 +215,24 @@ def get_game_by_slug(slug: str) -> Optional[Dict[str, Any]]:
 
 def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """
-    Returns games that have 'fuckingfast_links' but 'resolved' is False or 'direct_links' is empty.
+    Returns games that have 'fuckingfast_links' but are unresolved or partially resolved (len(direct_links) < len(fuckingfast_links)).
     """
     unresolved = []
     db = init_firestore()
     if db:
         try:
-            query = db.collection('games').where('resolved', '==', False)
-            if limit:
-                query = query.limit(limit)
-            docs = query.stream()
+            # Stream all games to find both unresolved (resolved==False) and partial games
+            docs = db.collection('games').stream()
             for doc in docs:
                 data = doc.to_dict()
-                if data.get('fuckingfast_links'):
+                ff_links = data.get('fuckingfast_links') or []
+                dl_links = data.get('direct_links') or []
+                is_resolved = data.get('resolved', False)
+
+                if ff_links and (not is_resolved or len(dl_links) < len(ff_links)):
                     unresolved.append(data)
+                    if limit and len(unresolved) >= limit:
+                        break
             if unresolved:
                 return unresolved
         except Exception as e:
@@ -237,7 +241,11 @@ def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     # Fallback to local DB
     local_data = _load_local_db()
     for slug, game in local_data.get('games', {}).items():
-        if (not game.get('resolved') or not game.get('direct_links')) and game.get('fuckingfast_links'):
+        ff_links = game.get('fuckingfast_links') or []
+        dl_links = game.get('direct_links') or []
+        is_resolved = game.get('resolved', False)
+
+        if ff_links and (not is_resolved or len(dl_links) < len(ff_links)):
             unresolved.append(game)
             if limit and len(unresolved) >= limit:
                 break
@@ -245,17 +253,27 @@ def get_unresolved_games(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     return unresolved
 
 
-def update_game_links(slug: str, direct_links: List[str]) -> bool:
+def update_game_links(slug: str, direct_links: List[str], total_parts: Optional[int] = None) -> bool:
     """
-    Updates the direct download links for a game and sets resolved = True.
+    Updates the direct download links for a game and sets resolved = True only when all parts are present.
     """
     now_iso = datetime.utcnow().isoformat() + 'Z'
+    
+    if total_parts is None:
+        existing = get_game_by_slug(slug)
+        if existing and existing.get('fuckingfast_links'):
+            total_parts = len(existing['fuckingfast_links'])
+        else:
+            total_parts = len(direct_links)
+
+    is_fully_resolved = bool(direct_links and len(direct_links) >= total_parts)
+
     update_payload = {
         'direct_links': direct_links,
-        'resolved': True if direct_links else False,
-        'resolved_at': now_iso,
+        'resolved': is_fully_resolved,
+        'resolved_at': now_iso if is_fully_resolved else None,
         'updated_at': now_iso,
-        'parts_count': len(direct_links)
+        'parts_count': total_parts
     }
 
     # 1. Update local DB

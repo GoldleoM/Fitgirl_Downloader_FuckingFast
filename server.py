@@ -1,10 +1,15 @@
 import os
 import sys
 import uuid
+import time
+import socket
+import ipaddress
 import threading
 import concurrent.futures
 import tempfile
-from flask import Flask, request, jsonify, send_from_directory, Response
+import urllib.parse
+import requests
+from flask import Flask, request, jsonify, send_from_directory, Response, make_response, redirect
 from flask_cors import CORS
 import fitgirl_scraper
 import fdm_bridge
@@ -21,16 +26,145 @@ if sys.platform == "win32":
 
 # Vercel's filesystem is read-only except /tmp
 TMP_DIR = os.getenv('TMP_DIR', tempfile.gettempdir())
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DIST_DIR = os.path.join(BASE_DIR, 'frontend', 'dist')
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder=DIST_DIR if os.path.exists(DIST_DIR) else STATIC_DIR)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# In-memory LRU image cache for ultra-fast, reliable 0ms cover loading
+IMAGE_CACHE = {}
+
+# In-memory IP rate limiter to protect backend against DDoS and scraping attacks
+RATE_LIMIT_STORE = {}
+RATE_LIMIT_LOCK = threading.Lock()
+MAX_REQUESTS_PER_MINUTE = 150
+
+def is_safe_proxy_url(url: str) -> bool:
+    """Blocks SSRF attacks by preventing access to localhost, internal networks, and cloud metadata."""
+    if not url or len(url) > 1000:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname_lower = hostname.lower()
+        # Block localhost, loopback, and cloud metadata hostnames
+        if hostname_lower in ('localhost', '127.0.0.1', '0.0.0.0', '::1', 'metadata.google.internal', 'instance-data'):
+            return False
+        # Resolve IP to check for private or link-local ranges
+        try:
+            ip = socket.gethostbyname(hostname)
+            ip_obj = ipaddress.ip_address(ip)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_reserved or ip_obj.is_link_local:
+                return False
+        except Exception:
+            return False
+        return True
+    except Exception:
+        return False
+
+@app.before_request
+def check_rate_limit():
+    """Anti-DDoS & abuse rate limiter per client IP."""
+    if not request.path.startswith('/api/'):
+        return None
+        
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
+    now = time.time()
+    
+    with RATE_LIMIT_LOCK:
+        history = RATE_LIMIT_STORE.get(client_ip, [])
+        valid_history = [t for t in history if now - t < 60]
+        
+        if len(valid_history) >= MAX_REQUESTS_PER_MINUTE:
+            return jsonify({
+                'success': False,
+                'error': 'Too many requests. Please slow down.'
+            }), 429
+            
+        valid_history.append(now)
+        RATE_LIMIT_STORE[client_ip] = valid_history
+        
+        if len(RATE_LIMIT_STORE) > 2000:
+            for ip in list(RATE_LIMIT_STORE.keys())[:500]:
+                if not RATE_LIMIT_STORE[ip] or now - RATE_LIMIT_STORE[ip][-1] > 120:
+                    RATE_LIMIT_STORE.pop(ip, None)
+
 @app.after_request
-def add_cors_headers(response):
+def apply_security_headers(response):
+    """Hardened HTTP security and CORS headers."""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    
+    # OWASP Recommended Security Headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
     return response
+
+@app.route('/api/image_proxy', methods=['GET'])
+def api_image_proxy():
+    image_url = request.args.get('url', '').strip()
+    if not image_url or image_url == 'None' or not is_safe_proxy_url(image_url):
+        return redirect('/placeholder.svg')
+
+    # Check cache first
+    if image_url in IMAGE_CACHE:
+        cached_data, content_type = IMAGE_CACHE[image_url]
+        response = make_response(cached_data)
+        response.headers['Content-Type'] = content_type
+        response.headers['Cache-Control'] = 'public, max-age=604800, immutable'
+        return response
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': 'https://fitgirl-repacks.site/',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        }
+        resp = requests.get(image_url, headers=headers, timeout=6, stream=True)
+        if resp.status_code == 200:
+            content_type = resp.headers.get('Content-Type', 'image/jpeg')
+            content = resp.content
+            # Guard against decompression bomb (max 15MB)
+            if len(content) <= 15 * 1024 * 1024:
+                if len(IMAGE_CACHE) > 500:
+                    IMAGE_CACHE.pop(next(iter(IMAGE_CACHE)))
+                IMAGE_CACHE[image_url] = (content, content_type)
+                
+                response = make_response(content)
+                response.headers['Content-Type'] = content_type
+                response.headers['Cache-Control'] = 'public, max-age=604800, immutable'
+                return response
+    except Exception:
+        pass
+
+    return redirect('/placeholder.svg')
+
+@app.route('/api/game_cover', methods=['GET'])
+def api_game_cover():
+    game_url = request.args.get('url', '').strip()
+    if not game_url or not is_safe_proxy_url(game_url):
+        return redirect('/placeholder.svg')
+
+    try:
+        details = fitgirl_scraper.get_game_details(game_url)
+        if details and details.get('cover') and details['cover'] != 'None':
+            cover = details['cover']
+            if cover.startswith('http') and is_safe_proxy_url(cover):
+                return redirect(f"/api/image_proxy?url={urllib.parse.quote(cover)}")
+    except Exception:
+        pass
+
+    return redirect('/placeholder.svg')
 
 # Background job registry
 jobs = {}
@@ -103,66 +237,7 @@ class DownloadJob:
             self.add_log(f"Error in download process: {e}")
             self.status = "failed"
 
-@app.route('/')
-def index():
-    return send_from_directory('static', 'index.html')
 
-@app.route('/<path:path>')
-def static_files(path):
-    return send_from_directory('static', path)
-
-FALLBACK_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#141724"/>
-      <stop offset="100%" stop-color="#0a0b10"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8a2be2"/>
-      <stop offset="100%" stop-color="#00f2fe"/>
-    </linearGradient>
-  </defs>
-  <rect width="300" height="400" fill="url(#bg)" rx="12"/>
-  <rect x="2" y="2" width="296" height="396" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" rx="10"/>
-  <circle cx="150" cy="170" r="45" fill="rgba(138,43,226,0.15)" stroke="url(#accent)" stroke-width="3"/>
-  <polygon points="140,152 168,170 140,188" fill="#00f2fe"/>
-  <text x="150" y="250" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">FITGIRL REPACK</text>
-  <text x="150" y="275" font-family="system-ui, sans-serif" font-size="12" fill="#8c96a8" text-anchor="middle">Cover Image</text>
-</svg>"""
-
-def proxy_image(img_url):
-    if not img_url:
-        return Response(FALLBACK_SVG, mimetype='image/svg+xml')
-    if img_url.startswith('//'):
-        img_url = 'https:' + img_url
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://fitgirl-repacks.site/'
-        }
-        res = fitgirl_scraper.scraper.get(img_url, headers=headers, timeout=12)
-        if res.status_code == 200 and len(res.content) > 100:
-            content_type = res.headers.get('Content-Type', 'image/jpeg')
-            return Response(res.content, mimetype=content_type)
-    except Exception as e:
-        print(f"Proxy error fetching {img_url}: {e}")
-    return Response(FALLBACK_SVG, mimetype='image/svg+xml')
-
-@app.route('/api/image_proxy', methods=['GET'])
-def api_image_proxy():
-    img_url = request.args.get('url', '').strip()
-    return proxy_image(img_url)
-
-@app.route('/api/game_cover', methods=['GET'])
-def api_game_cover():
-    game_url = request.args.get('url', '').strip()
-    if not game_url:
-        return Response(FALLBACK_SVG, mimetype='image/svg+xml')
-    cover_proxy_url = fitgirl_scraper.get_game_cover_url(game_url)
-    if cover_proxy_url and '/api/image_proxy?url=' in cover_proxy_url:
-        img_url = cover_proxy_url.split('/api/image_proxy?url=', 1)[1]
-        return proxy_image(img_url)
-    return Response(FALLBACK_SVG, mimetype='image/svg+xml')
 
 # Background auto-ingestion worker for automatic database expansion on searches
 _auto_ingest_executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
@@ -226,10 +301,19 @@ def _enrich_game_with_db_status(item):
         item['repack_size'] = db_game.get('repack_size') or item.get('repack_size', 'N/A')
         item['original_size'] = db_game.get('original_size') or item.get('original_size', 'N/A')
         item['genres'] = db_game.get('genres') or item.get('genres', '')
+        if db_game.get('cover') and db_game['cover'] != 'None':
+            item['cover'] = db_game['cover']
     else:
         item['resolved'] = False
         item['direct_links_count'] = 0
         item['repack_size'] = item.get('repack_size', 'N/A')
+
+    if not item.get('cover') or item['cover'] == 'None':
+        if url:
+            item['cover'] = f"/api/game_cover?url={urllib.parse.quote(url)}"
+        else:
+            item['cover'] = '/placeholder.svg'
+
     return item
 
 @app.route('/api/catalog', methods=['GET'])
@@ -635,6 +719,24 @@ def api_copy_clipboard():
             pass
     
     return jsonify({'success': False, 'error': 'No links available. Extract links first.'}), 400
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_spa(path):
+    if path.startswith('api/'):
+        return jsonify({'error': 'Endpoint not found'}), 404
+        
+    dist_file = os.path.join(DIST_DIR, path)
+    if os.path.exists(dist_file) and not os.path.isdir(dist_file):
+        return send_from_directory(DIST_DIR, path)
+        
+    static_file = os.path.join(STATIC_DIR, path)
+    if os.path.exists(static_file) and not os.path.isdir(static_file):
+        return send_from_directory(STATIC_DIR, path)
+        
+    if os.path.exists(os.path.join(DIST_DIR, 'index.html')):
+        return send_from_directory(DIST_DIR, 'index.html')
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7860))

@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 🛡️ FITBOY HARDENED SECURITY POLICY
+    // Deny ALL direct client-side Web/Mobile SDK reads and writes.
+    // 
+    // Attackers or bots attempting to query Firestore via the public Firebase project config
+    // will be completely blocked.
+    //
+    // The Python Backend communicates with Google Cloud Firestore using the Firebase Admin SDK
+    // authenticated via Service Account private key credentials, which operates with server-level
+    // authorization and is unaffected by client security rules.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
