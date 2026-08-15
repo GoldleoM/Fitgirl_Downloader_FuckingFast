@@ -55,9 +55,9 @@ export const MONETIZATION_CONFIG = {
     // 3. Ad Network Banner (Adsterra / A-Ads)
     adBanners: {
         enabled: true,
-        // Set to true once you paste your Adsterra / A-Ads iframe or script
-        showAdsterra: false,
-        adsterraZoneId: "",
+        showAdsterra: true,
+        adsterraZoneId: "e4b957e6ecb9a8adfcfdb4dfdb92ec13",
+        adsterraInvokeUrl: "https://pl30857228.effectivecpmnetwork.com/e4b957e6ecb9a8adfcfdb4dfdb92ec13/invoke.js",
         aAdsZoneId: ""
     }
 };
