@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, ArrowUp, Zap, Code2, ShieldCheck, Heart } from 'lucide-react';
 
-export default function Footer({ onNavigateHome, onOpenDonate }) {
+export default function Footer({ onNavigateHome }) {
     const currentYear = new Date().getFullYear();
     const githubUser = "GoldleoM";
     const githubProfileUrl = `https://github.com/${githubUser}`;
@@ -29,16 +29,6 @@ export default function Footer({ onNavigateHome, onOpenDonate }) {
                     </div>
 
                     <div className="footer-links-group">
-                        <button
-                            onClick={onOpenDonate}
-                            className="footer-btn profile-btn"
-                            title="Tip & Support the Project"
-                            style={{ borderColor: 'rgba(255, 0, 127, 0.35)', color: '#ff4099', background: 'rgba(255, 0, 127, 0.08)' }}
-                        >
-                            <Heart size={15} className="fill-current" />
-                            <span>Tip Jar</span>
-                        </button>
-
                         <a
                             href={githubRepoUrl}
                             target="_blank"

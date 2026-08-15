@@ -8,8 +8,6 @@ import Pagination from './components/Pagination';
 import GameModal from './components/GameModal';
 import DownloadDrawer from './components/DownloadDrawer';
 import Footer from './components/Footer';
-import DonateModal from './components/DonateModal';
-import AdBanner from './components/AdBanner';
 
 import { apiFetch } from './utils/api';
 import { getInstantLocalSuggestions } from './utils/fuzzySearch';
@@ -48,7 +46,6 @@ export default function App() {
     // Modals & Drawers
     const [selectedGameModal, setSelectedGameModal] = useState(null);
     const [activeJobDrawer, setActiveJobDrawer] = useState(null);
-    const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
 
     const isAnyFilterActive = filters.genre !== 'all' || filters.mode !== 'all' || filters.size !== 'all' || filters.status !== 'all';
 
@@ -340,7 +337,6 @@ export default function App() {
                 activeSuggestionIdx={activeSuggestionIdx}
                 onSelectSuggestion={handleSelectSuggestion}
                 onCloseSuggestions={() => setIsSuggestionsOpen(false)}
-                onOpenDonate={() => setIsDonateModalOpen(true)}
             />
 
             {/* Main Content */}
@@ -374,16 +370,10 @@ export default function App() {
                         onPageChange={handlePageChange}
                     />
                 )}
-
-                {/* Promotional & Monetization Booster Banner */}
-                <AdBanner />
             </main>
 
             {/* Footer */}
-            <Footer
-                onNavigateHome={handleNavigateHome}
-                onOpenDonate={() => setIsDonateModalOpen(true)}
-            />
+            <Footer onNavigateHome={handleNavigateHome} />
 
             {/* Game Details Modal */}
             <GameModal
@@ -399,12 +389,6 @@ export default function App() {
                 isOpen={!!activeJobDrawer}
                 jobData={activeJobDrawer}
                 onClose={() => setActiveJobDrawer(null)}
-            />
-
-            {/* Support / Tip Jar Modal */}
-            <DonateModal
-                isOpen={isDonateModalOpen}
-                onClose={() => setIsDonateModalOpen(false)}
             />
         </div>
     );

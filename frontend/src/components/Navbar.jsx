@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Zap, Search, X, ArrowRight, Database, Heart } from 'lucide-react';
+import { Zap, Search, X, ArrowRight, Database } from 'lucide-react';
 import SearchSuggestions from './SearchSuggestions';
 
 export default function Navbar({
@@ -11,8 +11,7 @@ export default function Navbar({
     isSuggestionsOpen,
     activeSuggestionIdx,
     onSelectSuggestion,
-    onCloseSuggestions,
-    onOpenDonate
+    onCloseSuggestions
 }) {
     const searchInputRef = useRef(null);
     const searchBoxRef = useRef(null);
@@ -119,17 +118,8 @@ export default function Navbar({
                 )}
             </div>
 
-            {/* Status Badges, Support Button & GitHub Link */}
+            {/* Status Badges & GitHub Link */}
             <div className="nav-status-group">
-                <button
-                    className="nav-support-btn"
-                    onClick={onOpenDonate}
-                    title="Support FitBoy PRO & Cloud Infrastructure"
-                >
-                    <Heart size={14} className="fill-current" />
-                    <span>Support</span>
-                </button>
-
                 <div className="fdm-status-badge">
                     <div className="status-pulse-dot"></div>
                     <Database size={13} />
