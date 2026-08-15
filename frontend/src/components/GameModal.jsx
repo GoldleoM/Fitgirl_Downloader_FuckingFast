@@ -16,7 +16,14 @@ import {
     FileText,
     ChevronDown,
     ChevronUp,
-    Sparkles
+    ChevronLeft,
+    ChevronRight,
+    Sparkles,
+    Image as ImageIcon,
+    BookOpen,
+    Building2,
+    Languages,
+    Tag
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
 
@@ -24,12 +31,16 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const [fullGameData, setFullGameData] = useState(null);
     const [copied, setCopied] = useState(false);
     const [showRawLinks, setShowRawLinks] = useState(false);
+    const [activeScreenshotIdx, setActiveScreenshotIdx] = useState(0);
+    const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
     useEffect(() => {
         if (!isOpen || !game) {
             setFullGameData(null);
             setCopied(false);
             setShowRawLinks(false);
+            setActiveScreenshotIdx(0);
+            setIsLightboxOpen(false);
             return;
         }
 
@@ -56,12 +67,16 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape' && isOpen) {
-                onClose();
+                if (isLightboxOpen) {
+                    setIsLightboxOpen(false);
+                } else {
+                    onClose();
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, onClose]);
+    }, [isOpen, isLightboxOpen, onClose]);
 
     if (!isOpen || !game) return null;
 
@@ -72,7 +87,14 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const rawLinks = activeGame.fuckingfast_links || [];
     const partsCount = activeGame.parts_count || rawLinks.length || directCount;
     const repackSize = activeGame.repack_size || 'Repack';
+    const originalSize = activeGame.original_size || '';
     const coverUrl = formatCoverUrl(activeGame.cover);
+    const screenshots = activeGame.screenshots || [];
+    const description = activeGame.description || '';
+    const genres = activeGame.genres || '';
+    const companies = activeGame.companies || '';
+    const languages = activeGame.languages || '';
+    const features = activeGame.features || [];
 
     const handleCopyRawLinks = async () => {
         if (!rawLinks || rawLinks.length === 0) return;
@@ -81,6 +103,18 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
             setCopied(true);
             setTimeout(() => setCopied(false), 2500);
         } catch (_) {}
+    };
+
+    const nextScreenshot = () => {
+        if (screenshots.length > 0) {
+            setActiveScreenshotIdx((prev) => (prev + 1) % screenshots.length);
+        }
+    };
+
+    const prevScreenshot = () => {
+        if (screenshots.length > 0) {
+            setActiveScreenshotIdx((prev) => (prev - 1 + screenshots.length) % screenshots.length);
+        }
     };
 
     return (
@@ -100,7 +134,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                 </button>
 
                 <div className="hub-modal-content">
-                    {/* Left Column: 3D Poster & Quick Stats */}
+                    {/* Left Column: 3D Poster & Quick Specs */}
                     <div className="hub-poster-column">
                         <div className="hub-poster-card">
                             <img
@@ -115,8 +149,14 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                         <div className="hub-specs-grid">
                             <div className="hub-spec-item">
                                 <span className="spec-label"><HardDrive size={12} className="text-neon" /> Repack Size</span>
-                                <span className="spec-val">{repackSize}</span>
+                                <span className="spec-val highlight-emerald">{repackSize}</span>
                             </div>
+                            {originalSize && originalSize !== 'N/A' && (
+                                <div className="hub-spec-item">
+                                    <span className="spec-label"><Layers size={12} /> Original Size</span>
+                                    <span className="spec-val strike-muted">{originalSize}</span>
+                                </div>
+                            )}
                             <div className="hub-spec-item">
                                 <span className="spec-label"><Layers size={12} /> Total Parts</span>
                                 <span className="spec-val">{partsCount} Parts</span>
@@ -132,7 +172,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                         </div>
                     </div>
 
-                    {/* Right Column: Title, Alerts, Features & Actions Hub */}
+                    {/* Right Column: Details, Screenshots, Description & Actions */}
                     <div className="hub-details-column">
                         {/* Title & Badges Header */}
                         <div className="hub-header-group">
@@ -155,6 +195,30 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                             </div>
 
                             <h1 className="hub-game-title">{activeGame.title}</h1>
+
+                            {/* Tags & Developer Info Row */}
+                            {(genres || companies) && (
+                                <div className="hub-meta-tags-row">
+                                    {companies && (
+                                        <span className="hub-meta-pill" title="Developer / Publisher">
+                                            <Building2 size={12} className="text-cyan" />
+                                            <span>{companies}</span>
+                                        </span>
+                                    )}
+                                    {genres && (
+                                        <span className="hub-meta-pill" title="Genres / Tags">
+                                            <Tag size={12} className="text-purple" />
+                                            <span>{genres}</span>
+                                        </span>
+                                    )}
+                                    {languages && (
+                                        <span className="hub-meta-pill" title="Supported Languages">
+                                            <Languages size={12} className="text-pink" />
+                                            <span>{languages}</span>
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Status Alert Banner */}
@@ -180,14 +244,81 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                             </div>
                         )}
 
+                        {/* Gameplay Screenshots Gallery */}
+                        {screenshots.length > 0 && (
+                            <div className="hub-section screenshots-section">
+                                <div className="hub-section-header-row">
+                                    <h4 className="hub-section-title">
+                                        <ImageIcon size={15} className="text-neon" />
+                                        <span>Gameplay Screenshots ({screenshots.length})</span>
+                                    </h4>
+                                    <span className="screenshots-counter">{activeScreenshotIdx + 1} / {screenshots.length}</span>
+                                </div>
+
+                                <div className="screenshot-main-viewport">
+                                    <img
+                                        src={screenshots[activeScreenshotIdx]}
+                                        alt={`${activeGame.title} screenshot ${activeScreenshotIdx + 1}`}
+                                        className="screenshot-main-img"
+                                        onClick={() => setIsLightboxOpen(true)}
+                                        title="Click to expand"
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                    />
+                                    {screenshots.length > 1 && (
+                                        <>
+                                            <button className="screenshot-nav-btn prev" onClick={prevScreenshot} title="Previous Screenshot">
+                                                <ChevronLeft size={20} />
+                                            </button>
+                                            <button className="screenshot-nav-btn next" onClick={nextScreenshot} title="Next Screenshot">
+                                                <ChevronRight size={20} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+
+                                {screenshots.length > 1 && (
+                                    <div className="screenshot-thumbnails-strip">
+                                        {screenshots.map((s, idx) => (
+                                            <button
+                                                key={idx}
+                                                className={`screenshot-thumb-btn ${idx === activeScreenshotIdx ? 'active' : ''}`}
+                                                onClick={() => setActiveScreenshotIdx(idx)}
+                                            >
+                                                <img src={s} alt={`Thumb ${idx + 1}`} onError={(e) => { e.target.style.display = 'none'; }} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Game Description & Overview */}
+                        {description && (
+                            <div className="hub-section description-section">
+                                <h4 className="hub-section-title">
+                                    <BookOpen size={15} className="text-cyan" />
+                                    <span>About the Game</span>
+                                </h4>
+                                <div className="hub-description-box">
+                                    <p className="hub-description-text">{description}</p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Repack Highlights */}
                         <div className="hub-section">
                             <h4 className="hub-section-title">Repack Features</h4>
                             <ul className="hub-feature-list">
-                                <li>Multi-part archive hosted on ultra-fast FuckingFast CDN mirrors</li>
-                                <li>100% Lossless &amp; MD5 Perfect: identical to original game files after install</li>
-                                <li>Seamless batch import for Free Download Manager, JDownloader 2, and IDM</li>
-                                <li>Auto-clipboard copy &amp; <code>download_links.txt</code> export</li>
+                                {features.length > 0 ? (
+                                    features.map((feat, idx) => <li key={idx}>{feat}</li>)
+                                ) : (
+                                    <>
+                                        <li>Multi-part archive hosted on ultra-fast FuckingFast CDN mirrors</li>
+                                        <li>100% Lossless &amp; MD5 Perfect: identical to original game files after install</li>
+                                        <li>Seamless batch import for Free Download Manager, JDownloader 2, and IDM</li>
+                                        <li>Auto-clipboard copy &amp; <code>download_links.txt</code> export</li>
+                                    </>
+                                )}
                             </ul>
                         </div>
 
@@ -277,6 +408,21 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                     </div>
                 </div>
             </div>
+
+            {/* Full-Screen Lightbox for Screenshots */}
+            {isLightboxOpen && screenshots.length > 0 && (
+                <div className="lightbox-overlay" onClick={() => setIsLightboxOpen(false)}>
+                    <button className="lightbox-close-btn" onClick={() => setIsLightboxOpen(false)}>
+                        <X size={24} />
+                    </button>
+                    <img
+                        src={screenshots[activeScreenshotIdx]}
+                        alt="Enlarged screenshot"
+                        className="lightbox-img"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
         </div>
     );
 }

@@ -343,47 +343,97 @@ def get_popular_repacks(page=1, per_page=16):
     }
 
 def get_game_details(game_url):
-    """Fetch full details and FuckingFast download links for a specific game page."""
+    """Fetch full details, screenshots, description, metadata, and direct links for a game page."""
     try:
         res = scraper.get(game_url, headers=HEADERS, timeout=20)
         if res.status_code != 200:
             return None
             
         soup = BeautifulSoup(res.text, 'html.parser')
+        content = soup.find('div', class_='entry-content') or soup
         
-        # Title
+        # 1. Title
         title_elem = soup.find('h1', class_='entry-title')
         title = title_elem.text.strip() if title_elem else "Unknown Game"
         
-        # Cover image
-        cover = extract_cover_url(soup)
+        # 2. Cover image
+        cover = extract_cover_url(content)
         
-        # Extract features / sizes
-        text = soup.text
+        # 3. Screenshots (RiotPixels, ImageBan, FastPic, etc.)
+        BAD_KEYWORDS = ['torrent-stats', 'fg_updates', 'cropped-icon', 'hit-counter', 'paypal', 'donate', 'flag', 'avatar']
+        raw_screenshots = []
+        for img in content.find_all('img'):
+            src = img.get('src') or img.get('data-src') or img.get('data-lazy-src')
+            if not src or any(b in src.lower() for b in BAD_KEYWORDS):
+                continue
+            if src.startswith('//'):
+                src = 'https:' + src
+            # Check if screenshot host
+            if any(h in src.lower() for h in ['riotpixels', 'imageban', 'fastpic', 'pixhost', 'imagetwist', 'postimg']):
+                # Upgrade riotpixels thumbnail to 720p high resolution
+                high_res = src.replace('.240p.jpg', '.720p.jpg').replace('http://', 'https://')
+                if high_res != cover and high_res not in raw_screenshots:
+                    raw_screenshots.append(high_res)
+                    
+        screenshots = [f"/api/image_proxy?url={s}" for s in raw_screenshots[:8]]
+
+        # 4. Metadata (Genres, Companies, Languages, Sizes)
+        full_text = content.text
         features = []
         repack_size = "N/A"
         original_size = "N/A"
+        genres = ""
+        companies = ""
+        languages = ""
         
-        match_repack = re.search(r'Repack Size:\s*([^,\n]+)', text, re.IGNORECASE)
+        match_repack = re.search(r'Repack Size:\s*([^,\n]+)', full_text, re.IGNORECASE)
         if match_repack:
             repack_size = match_repack.group(1).strip()
             
-        match_orig = re.search(r'Original Size:\s*([^,\n]+)', text, re.IGNORECASE)
+        match_orig = re.search(r'Original Size:\s*([^,\n]+)', full_text, re.IGNORECASE)
         if match_orig:
             original_size = match_orig.group(1).strip()
+
+        m_gen = re.search(r'Genres?/Tags?:\s*([^\n\r]+)', full_text, re.IGNORECASE)
+        if m_gen:
+            genres = m_gen.group(1).strip()
+
+        m_comp = re.search(r'Companies:\s*([^\n\r]+)', full_text, re.IGNORECASE)
+        if m_comp:
+            companies = m_comp.group(1).strip()
+
+        m_lang = re.search(r'Languages:\s*([^\n\r]+)', full_text, re.IGNORECASE)
+        if m_lang:
+            languages = m_lang.group(1).strip()
             
-        # Extract bullet point features
-        ul = soup.find('ul')
+        # 5. Extract bullet point features
+        ul = content.find('ul')
         if ul:
             features = [li.text.strip() for li in ul.find_all('li')[:6]]
 
-        # Extract FuckingFast links across entire document (including spoiler accordions)
+        # 6. Extract Game Description / Story Overview
+        desc_paragraphs = []
+        found_desc = False
+        for elem in content.find_all(['p', 'div', 'h3']):
+            t = elem.text.strip()
+            if 'Game Description' in t:
+                found_desc = True
+                continue
+            if found_desc:
+                if any(stop in t.lower() for stop in ['download mirrors', 'repack features', 'selective download', 'direct links', 'torrent mirrors']):
+                    break
+                if len(t) > 30 and not any(k in t for k in ['Genres/Tags:', 'Companies:', 'Languages:', 'Original Size:', 'Repack Size:']):
+                    if t not in desc_paragraphs:
+                        desc_paragraphs.append(t)
+                        
+        description = '\n\n'.join(desc_paragraphs[:4]) if desc_paragraphs else ""
+
+        # 7. Extract FuckingFast links across entire document (including spoiler accordions)
         fuckingfast_links = []
-        all_a = soup.find_all('a', href=True)
+        all_a = content.find_all('a', href=True)
         for a in all_a:
             href = a['href']
             if 'fuckingfast.co' in href:
-                # Deduplicate while preserving order
                 if href not in fuckingfast_links:
                     fuckingfast_links.append(href)
                         
@@ -391,6 +441,11 @@ def get_game_details(game_url):
             'title': title,
             'url': game_url,
             'cover': cover,
+            'screenshots': screenshots,
+            'description': description,
+            'genres': genres,
+            'companies': companies,
+            'languages': languages,
             'repack_size': repack_size,
             'original_size': original_size,
             'features': features,
