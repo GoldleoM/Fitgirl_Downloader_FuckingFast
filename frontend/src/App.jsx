@@ -12,7 +12,7 @@ import Footer from './components/Footer';
 import { apiFetch } from './utils/api';
 import { getInstantLocalSuggestions } from './utils/fuzzySearch';
 import { parseSizeInGB } from './utils/parser';
-import { GENRE_KEYWORDS } from './data/genreKeywords';
+import { GENRE_KEYWORDS, isAdultGame } from './data/genreKeywords';
 
 export default function App() {
     // In-memory catalog index for 0ms instant fuzzy suggestions & local filtering
@@ -137,14 +137,21 @@ export default function App() {
     // 3. Filter evaluator
     const matchesFilters = useCallback((game) => {
         const titleLower = (game.title || '').toLowerCase();
+        const genresLower = (game.genres || '').toLowerCase();
         const excerptLower = (game.excerpt || '').toLowerCase();
-        const combined = `${titleLower} ${excerptLower}`;
+        const slugLower = (game.slug || '').toLowerCase();
+        const urlLower = (game.url || '').toLowerCase();
+        const combined = `${titleLower} ${genresLower} ${excerptLower} ${slugLower} ${urlLower}`;
 
         // Genre
         if (filters.genre !== 'all') {
-            const kws = GENRE_KEYWORDS[filters.genre] || [];
-            const match = kws.some(kw => combined.includes(kw));
-            if (!match) return false;
+            if (filters.genre === 'adult') {
+                if (!isAdultGame(game)) return false;
+            } else {
+                const kws = GENRE_KEYWORDS[filters.genre] || [];
+                const match = kws.some(kw => combined.includes(kw));
+                if (!match) return false;
+            }
         }
 
         // Mode
@@ -172,11 +179,44 @@ export default function App() {
         return true;
     }, [filters]);
 
+    // Fetch genre results from server when user picks a category to ensure deep catalog matching
+    useEffect(() => {
+        if (filters.genre !== 'all') {
+            const searchTerms = {
+                adult: 'erotic',
+                anime: 'anime',
+                horror: 'horror',
+                racing: 'racing',
+                rpg: 'rpg',
+                action: 'action',
+                strategy: 'strategy',
+                indie: 'indie'
+            };
+            const term = searchTerms[filters.genre] || filters.genre;
+            apiFetch(`/api/search?q=${encodeURIComponent(term)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.results && data.results.length > 0) {
+                        ingestGamesIntoIndex(data.results);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [filters.genre, ingestGamesIntoIndex]);
+
     // 4. Filtered games calculation
     const allFilteredGames = useMemo(() => {
         if (!isAnyFilterActive) return [];
-        return localGamesIndex.filter(matchesFilters);
-    }, [isAnyFilterActive, localGamesIndex, matchesFilters]);
+        // Filter combined pool of local index + currently loaded catalog games
+        const poolMap = new Map();
+        [...localGamesIndex, ...catalogGames, ...searchResults].forEach(g => {
+            const id = g.slug || g.url;
+            if (id && !poolMap.has(id)) {
+                poolMap.set(id, g);
+            }
+        });
+        return Array.from(poolMap.values()).filter(matchesFilters);
+    }, [isAnyFilterActive, localGamesIndex, catalogGames, searchResults, matchesFilters]);
 
     // Reset filter page when filters change
     useEffect(() => {
