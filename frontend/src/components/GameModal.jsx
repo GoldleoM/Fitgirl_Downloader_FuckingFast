@@ -73,7 +73,22 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                 const res = await apiFetch(`/api/game?${param}`);
                 const data = await res.json();
                 if (isMounted && data.success && data.game) {
-                    setFullGameData(prev => ({ ...(prev || {}), ...data.game }));
+                    setFullGameData(prev => {
+                        const baseReqs = cached?.requirements || prev?.requirements || {};
+                        const incomingReqs = data.game.requirements || {};
+                        const mergedReqs = {
+                            ...baseReqs,
+                            ...incomingReqs,
+                            minimum: (incomingReqs.minimum?.graphics || incomingReqs.minimum?.processor) ? incomingReqs.minimum : (baseReqs.minimum || {}),
+                            recommended: (incomingReqs.recommended?.graphics || incomingReqs.recommended?.processor) ? incomingReqs.recommended : (baseReqs.recommended || {})
+                        };
+                        return {
+                            ...(cached || {}),
+                            ...(prev || {}),
+                            ...data.game,
+                            requirements: mergedReqs
+                        };
+                    });
                     if (onGameUpdate) {
                         onGameUpdate(data.game);
                     }

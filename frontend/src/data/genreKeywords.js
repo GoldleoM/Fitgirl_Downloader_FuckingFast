@@ -65,26 +65,25 @@ export const GENRE_KEYWORDS = {
         'k-pop idol stories', 'returning to mia'
     ],
     adult: [
-        'adult', 'erotic', 'hentai', 'nudity', 'sexual content', 'sexual', 'nsfw', 'ecchi', '18+',
-        'lewd', 'succubus', 'subverse', 'h-game', 'waifu', 'dating sim', 'dating', 'being a dik', 'dik',
-        'lust', 'honey select', 'honeycome', 'house party', 'koikatsu', 'treasure of nadia', 'nadia',
-        'freshwomen', 'freshwoman', 'harem', 'porn', 'uncensored', 'milf', 'fetish', 'sensual',
-        'summer memories', 'acting lessons', 'lewdapocalypse', 'breeding', 'sex', 'maid', 'ero', 'strip',
-        'sinners', 'sinner', 'girl', 'girls', 'waifus', 'romance', 'bikini', 'swimsuit', 'vampire',
-        'agefield high', 'rock the school', 'school', 'dream girl', 'entity the black day', 'k-pop idol stories',
-        'galley house', 'returning to mia', 'lust n dead'
+        'adult', 'erotic', 'erotica', 'eroge', 'hentai', 'nudity', 'nude', 'sexual content', 'sexual',
+        'nsfw', 'ecchi', '18+', 'visual novel', 'visual novels', 'lewd', 'succubus', 'porn', 'porno',
+        'uncensored', 'milf', 'fetish', 'h-game', 'h-games', 'waifu', 'waifus', 'harem', 'dating sim',
+        'house party', 'koikatsu', 'honey select', 'honeycome', 'treasure of nadia', 'being a dik',
+        'freshwomen', 'freshwoman', 'subverse', 'lewdapocalypse', 'lust', 'lust n dead', 'the genesis order',
+        'av director', 'acting lessons', 'summer memories'
     ]
 };
 
 export const ADULT_KEYWORDS = GENRE_KEYWORDS.adult;
 
+const ADULT_REGEX = /\b(adult|erotic|erotica|eroge|hentai|nudity|nude|sexual content|sexual|nsfw|ecchi|18\+|visual novel|visual novels|lewd|succubus|porn|porno|uncensored|milf|fetish|h-game|h-games|waifu|waifus|harem|dating sim|house party|koikatsu|honey select|honeycome|treasure of nadia|being a dik|freshwomen|freshwoman|subverse|lewdapocalypse|lust|lust n dead|the genesis order|av director|acting lessons|summer memories)\b/i;
+
 export function isAdultGame(game) {
     if (!game) return false;
-    const title = (game.title || '').toLowerCase();
-    const genres = (game.genres || '').toLowerCase();
-    const excerpt = (game.excerpt || '').toLowerCase();
-    const slug = (game.slug || '').toLowerCase();
-    const url = (game.url || '').toLowerCase();
-    const combined = `${title} ${genres} ${excerpt} ${slug} ${url}`;
-    return ADULT_KEYWORDS.some(kw => combined.includes(kw));
+    const title = game.title || '';
+    const genres = game.genres || '';
+    const tags = Array.isArray(game.tags) ? game.tags.join(' ') : (game.tags || '');
+    const combined = `${title} ${genres} ${tags}`;
+    return ADULT_REGEX.test(combined);
 }
+
