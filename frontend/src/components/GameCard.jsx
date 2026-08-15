@@ -1,10 +1,12 @@
 import React from 'react';
-import { Zap, Clock, HardDrive, CheckCircle2, Eye, ExternalLink, Flame } from 'lucide-react';
+import { Zap, Clock, HardDrive, CheckCircle2, Eye, ExternalLink, Flame, ShieldAlert } from 'lucide-react';
 import { formatCoverUrl } from '../utils/api';
+import { isAdultGame } from '../data/genreKeywords';
 
 export default function GameCard({ game, onSelect, style }) {
     const isResolved = game.resolved;
     const isRequested = !isResolved && Boolean(game.requested);
+    const isAdult = isAdultGame(game);
     
     let badgeClass = 'badge-unavailable';
     let badgeIcon = <Clock size={12} />;
@@ -31,15 +33,21 @@ export default function GameCard({ game, onSelect, style }) {
     };
 
     return (
-        <article className="game-card" onClick={handleCardClick} style={style}>
+        <article className={`game-card ${isAdult ? 'is-adult-card' : ''}`} onClick={handleCardClick} style={style}>
             <div className="card-poster-wrap">
                 <img
                     className="card-poster"
                     src={coverUrl}
                     alt={game.title}
                     loading="lazy"
+                    referrerPolicy="no-referrer"
                     onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.svg'; }}
                 />
+                {isAdult && (
+                    <div className="card-adult-overlay-badge" title="Adult 18+ Content">
+                        <span>🔞 18+</span>
+                    </div>
+                )}
                 <div className="card-poster-vignette"></div>
             </div>
             <div className="card-content">

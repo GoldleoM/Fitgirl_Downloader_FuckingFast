@@ -27,9 +27,11 @@ import {
     Cpu,
     Flame,
     Loader2,
-    Monitor
+    Monitor,
+    ShieldAlert
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
+import { isAdultGame } from '../data/genreKeywords';
 
 export default function GameModal({ isOpen, game, onClose, onStartDownload, onGameUpdate }) {
     const [fullGameData, setFullGameData] = useState(null);
@@ -238,6 +240,12 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                     <span className="hub-badge-pill pending">
                                         <Clock size={12} />
                                         <span>Links Pending</span>
+                                    </span>
+                                )}
+                                {isAdultGame(activeGame) && (
+                                    <span className="hub-badge-pill adult-badge" title="Mature 18+ Content">
+                                        <ShieldAlert size={12} />
+                                        <span>🔞 18+ Adult</span>
                                     </span>
                                 )}
                                 <span className="hub-badge-pill neutral">

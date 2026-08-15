@@ -14,7 +14,8 @@ import {
     HardDrive,
     Zap,
     RotateCcw,
-    Filter
+    Filter,
+    ShieldAlert
 } from 'lucide-react';
 
 const GENRE_CHIPS = [
@@ -25,7 +26,8 @@ const GENRE_CHIPS = [
     { id: 'racing', label: 'Racing & Sports', icon: Car },
     { id: 'strategy', label: 'Strategy & Sim', icon: Swords },
     { id: 'indie', label: 'Indie & Co-Op', icon: Puzzle },
-    { id: 'anime', label: 'Anime & JRPG', icon: Flame }
+    { id: 'anime', label: 'Anime & JRPG', icon: Flame },
+    { id: 'adult', label: '🔞 18+ Adult', icon: ShieldAlert }
 ];
 
 export default function CategoryFilters({
