@@ -19,6 +19,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
+import VpnBanner from './VpnBanner';
 
 export default function GameModal({ isOpen, game, onClose, onStartDownload, onGameUpdate }) {
     const [fullGameData, setFullGameData] = useState(null);
@@ -190,6 +191,9 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                 <li>Auto-clipboard copy &amp; <code>download_links.txt</code> export</li>
                             </ul>
                         </div>
+
+                        {/* VPN Speed & Privacy Tip */}
+                        <VpnBanner compact={true} />
 
                         {/* Action Buttons Hub */}
                         <div className="hub-actions-container">

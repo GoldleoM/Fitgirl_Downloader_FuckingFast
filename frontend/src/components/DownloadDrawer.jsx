@@ -21,6 +21,7 @@ import {
     ClipboardList
 } from 'lucide-react';
 import { apiFetch } from '../utils/api';
+import VpnBanner from './VpnBanner';
 
 export default function DownloadDrawer({ isOpen, jobData, onClose }) {
     const [progressPercent, setProgressPercent] = useState(0);
@@ -312,6 +313,9 @@ export default function DownloadDrawer({ isOpen, jobData, onClose }) {
                         <span>Browser Batch Download</span>
                     </button>
                 </div>
+
+                {/* VPN Security & Speed Tip Banner */}
+                <VpnBanner compact={true} />
 
                 {/* Batch Downloader Guides */}
                 <div className="guide-card">
