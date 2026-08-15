@@ -4,15 +4,16 @@
  */
 
 export const MONETIZATION_CONFIG = {
-    // 1. VPN Affiliate (Surfshark / NordVPN / PIA)
-    vpn: {
+    // 1. Gaming Hardware & Storage Affiliate (CouponDunia / Amazon / Flipkart)
+    hardwareDeals: {
         enabled: true,
-        title: "Bypass ISP Speed Limits & Shield Your Downloads",
-        tagline: "Gamers recommend using a high-speed VPN for unthrottled gigabit downloads and zero logging.",
-        dealBadge: "82% OFF + 3 MONTHS FREE",
-        // Replace with your affiliate / referral link:
-        affiliateUrl: "https://surfshark.club/friend/goldleom", 
-        providerName: "Surfshark VPN",
+        title: "Running Out of Space for Repacks? Upgrade Storage",
+        tagline: "High-speed 1TB/2TB NVMe SSDs & PC gaming controllers on major discounts.",
+        dealBadge: "UP TO 60% OFF DEALS",
+        // Paste your generated CouponDunia link here:
+        affiliateUrl: "https://www.amazon.in/s?k=nvme+ssd+1tb+gaming", 
+        buttonText: "Browse Gaming SSDs & Gear",
+        providerName: "Gaming Deals",
     },
 
     // 2. Creator Tip Jar & Donations
