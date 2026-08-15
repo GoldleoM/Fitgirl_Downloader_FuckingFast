@@ -468,45 +468,64 @@ def api_game():
     if not game_url and not game_slug:
         return jsonify({'success': False, 'error': 'Missing url or slug parameter'}), 400
 
-    # 1. Check database for existing game by slug
     if not game_slug and game_url:
         cleaned = game_url.rstrip('/')
         game_slug = cleaned.split('/')[-1]
 
-    if game_slug:
-        db_game = firestore_db.get_game_by_slug(game_slug)
-        if db_game:
-            # Normalize cover image URL
-            cov = db_game.get('cover')
-            if not cov or cov == 'None':
-                db_game['cover'] = f"/api/game_cover?url={db_game.get('url', game_url)}"
-            elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
-                db_game['cover'] = f"/api/image_proxy?url={cov}"
-                
-            if db_game.get('fuckingfast_links') and len(db_game['fuckingfast_links']) > 0:
-                return jsonify({'success': True, 'game': db_game})
+    target_url = game_url or (f"https://fitgirl-repacks.site/{game_slug}/" if game_slug else None)
 
-    # 2. If not found in DB or missing raw links, scrape from FitGirl and store raw fuckingfast links in DB!
-    if game_url:
-        details = fitgirl_scraper.get_game_details(game_url)
+    # 1. Check database for existing game by slug
+    db_game = firestore_db.get_game_by_slug(game_slug) if game_slug else None
+
+    # Check if db_game already has rich data (description & screenshots)
+    has_rich_data = bool(db_game and (db_game.get('description') or (db_game.get('screenshots') and len(db_game['screenshots']) > 0)))
+
+    if db_game and has_rich_data and db_game.get('fuckingfast_links') and len(db_game['fuckingfast_links']) > 0:
+        cov = db_game.get('cover')
+        if not cov or cov == 'None':
+            db_game['cover'] = f"/api/game_cover?url={db_game.get('url', target_url)}"
+        elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
+            db_game['cover'] = f"/api/image_proxy?url={cov}"
+        return jsonify({'success': True, 'game': db_game})
+
+    # 2. Scrape full rich details (screenshots, description, requirements, accurate features)
+    if target_url:
+        details = fitgirl_scraper.get_game_details(target_url)
         if details:
             if not game_slug:
-                game_slug = game_url.rstrip('/').split('/')[-1]
+                game_slug = target_url.rstrip('/').split('/')[-1]
             details['slug'] = game_slug
-            if 'resolved' not in details:
+            
+            # Preserve existing direct links and resolution status from DB
+            if db_game:
+                details['resolved'] = db_game.get('resolved', False)
+                details['direct_links'] = db_game.get('direct_links', [])
+                details['requested'] = db_game.get('requested', False)
+                details['request_count'] = db_game.get('request_count', 0)
+                # If scraped links are empty but db has them, preserve db links
+                if not details.get('fuckingfast_links') and db_game.get('fuckingfast_links'):
+                    details['fuckingfast_links'] = db_game.get('fuckingfast_links')
+            else:
                 details['resolved'] = False
-            if 'direct_links' not in details:
                 details['direct_links'] = []
             
             cov = details.get('cover')
             if not cov or cov == 'None':
-                details['cover'] = f"/api/game_cover?url={game_url}"
+                details['cover'] = f"/api/game_cover?url={target_url}"
             elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
                 details['cover'] = f"/api/image_proxy?url={cov}"
             
-            # Save raw fuckingfast links into Firestore so user can resolve them with the script later
-            firestore_db.upsert_game(details)
+            # Save enriched details into Firestore
+            try:
+                firestore_db.upsert_game(details)
+            except Exception as e:
+                print(f"[api_game] Error saving enriched game to Firestore: {e}")
+                
             return jsonify({'success': True, 'game': details})
+
+    # Fallback to existing db_game if scrape failed
+    if db_game:
+        return jsonify({'success': True, 'game': db_game})
             
     return jsonify({'success': False, 'error': 'Could not fetch game details'}), 404
 

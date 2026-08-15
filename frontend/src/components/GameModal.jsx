@@ -24,7 +24,9 @@ import {
     Building2,
     Languages,
     Tag,
-    Cpu
+    Cpu,
+    Flame,
+    Loader2
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
 
@@ -34,6 +36,8 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const [showRawLinks, setShowRawLinks] = useState(false);
     const [activeScreenshotIdx, setActiveScreenshotIdx] = useState(0);
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+    const [isRequesting, setIsRequesting] = useState(false);
+    const [requestSuccess, setRequestSuccess] = useState(false);
 
     useEffect(() => {
         if (!isOpen || !game) {
@@ -42,6 +46,8 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
             setShowRawLinks(false);
             setActiveScreenshotIdx(0);
             setIsLightboxOpen(false);
+            setIsRequesting(false);
+            setRequestSuccess(false);
             return;
         }
 
@@ -97,6 +103,42 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const languages = activeGame.languages || '';
     const features = activeGame.features || [];
     const requirements = activeGame.requirements || {};
+
+    const isRequested = activeGame.requested || requestSuccess;
+    const requestCount = (activeGame.request_count || 0) + (requestSuccess && !activeGame.requested ? 1 : 0);
+
+    const handleRequestGame = async () => {
+        if (isRequesting || isRequested) return;
+        setIsRequesting(true);
+        try {
+            const res = await apiFetch('/api/request_game', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    slug: activeGame.slug,
+                    title: activeGame.title,
+                    url: activeGame.url
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setRequestSuccess(true);
+                const updatedGame = {
+                    ...activeGame,
+                    requested: true,
+                    request_count: (activeGame.request_count || 0) + 1
+                };
+                setFullGameData(updatedGame);
+                if (onGameUpdate) {
+                    onGameUpdate(updatedGame);
+                }
+            }
+        } catch (err) {
+            console.error('Request failed:', err);
+        } finally {
+            setIsRequesting(false);
+        }
+    };
 
     const handleCopyRawLinks = async () => {
         if (!rawLinks || rawLinks.length === 0) return;
@@ -184,10 +226,15 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                         <Zap size={12} />
                                         <span>1-Click Ready</span>
                                     </span>
+                                ) : isRequested ? (
+                                    <span className="hub-badge-pill priority">
+                                        <Flame size={12} />
+                                        <span>Priority Queued</span>
+                                    </span>
                                 ) : (
                                     <span className="hub-badge-pill pending">
                                         <Clock size={12} />
-                                        <span>Cloud Pending</span>
+                                        <span>Links Pending</span>
                                     </span>
                                 )}
                                 <span className="hub-badge-pill neutral">
@@ -234,6 +281,16 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                     <p>Direct download links ({directCount} parts) are verified in the cloud database. Download instantly with full multithreaded speed.</p>
                                 </div>
                             </div>
+                        ) : isRequested ? (
+                            <div className="hub-status-banner priority">
+                                <div className="hub-status-icon">
+                                    <Flame size={22} className="text-amber" />
+                                </div>
+                                <div className="hub-status-text">
+                                    <h4>🎯 In Priority Link Resolution Queue</h4>
+                                    <p>This game has been placed into the high-priority queue ({requestCount} request{requestCount !== 1 ? 's' : ''}). The automated scraper is scheduled to extract these direct download links first!</p>
+                                </div>
+                            </div>
                         ) : (
                             <div className="hub-status-banner pending">
                                 <div className="hub-status-icon">
@@ -241,7 +298,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                 </div>
                                 <div className="hub-status-text">
                                     <h4>Direct Links Not Cached in Cloud Vault</h4>
-                                    <p>Direct links are not cached in the cloud database yet. Download the standalone <strong>Local EXE Extractor</strong> to resolve all links instantly on your PC.</p>
+                                    <p>Direct links are not cached in the cloud database yet. Click <strong>Request Direct Links</strong> to prioritize this game, or download the <strong>Local EXE Extractor</strong> to resolve immediately on your PC.</p>
                                 </div>
                             </div>
                         )}
@@ -364,16 +421,37 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                     <Download size={18} />
                                     <span>1-Click Download ({directCount} Parts)</span>
                                 </button>
+                            ) : isRequested ? (
+                                <button
+                                    className="hub-btn-priority-active"
+                                    disabled
+                                    title="This game is in the high priority resolution queue"
+                                >
+                                    <Flame size={18} />
+                                    <span>In Priority Queue ({requestCount} Request{requestCount !== 1 ? 's' : ''})</span>
+                                </button>
                             ) : (
+                                <button
+                                    className="hub-btn-request"
+                                    onClick={handleRequestGame}
+                                    disabled={isRequesting}
+                                    title="Queue this game into the automated link extractor priority queue"
+                                >
+                                    {isRequesting ? <Loader2 size={18} className="animate-spin" /> : <Flame size={18} />}
+                                    <span>{isRequesting ? 'Adding to Priority Queue...' : '🎯 Request Direct Links (Priority)'}</span>
+                                </button>
+                            )}
+
+                            {!isResolved && (
                                 <a
                                     href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/download/v1.0.1/FitGirl_Link_Extractor.exe"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="hub-btn-primary"
+                                    className="hub-btn-secondary"
                                     title="Download Standalone Windows .EXE Link Extractor"
                                 >
-                                    <Download size={18} />
-                                    <span>Download Local EXE Extractor</span>
+                                    <Download size={15} />
+                                    <span>Local EXE</span>
                                 </a>
                             )}
 
