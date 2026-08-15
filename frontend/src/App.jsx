@@ -387,6 +387,39 @@ export default function App() {
         return catalogGames;
     }, [isSearching, searchResults, isAnyFilterActive, allFilteredGames, filterPage, catalogGames]);
 
+    // 6. Preload / Fetch full game details, screenshots & specs for all games on the active page (and unload on page change)
+    useEffect(() => {
+        if (!displayedGames || displayedGames.length === 0) return;
+
+        const controller = new AbortController();
+        const { signal } = controller;
+
+        displayedGames.forEach(game => {
+            // If already enriched with full description, screenshots & Steam specs, skip
+            if (game.description && game.screenshots?.length > 0 && game.requirements?.minimum?.graphics) {
+                return;
+            }
+
+            const param = game.slug ? `slug=${encodeURIComponent(game.slug)}` : (game.url ? `url=${encodeURIComponent(game.url)}` : '');
+            if (!param) return;
+
+            apiFetch(`/api/game?${param}`, { signal })
+                .then(res => res.json())
+                .then(data => {
+                    if (!signal.aborted && data.success && data.game) {
+                        ingestGamesIntoIndex([data.game]);
+                        setCatalogGames(prev => prev.map(g => (g.slug === data.game.slug || g.url === data.game.url) ? { ...g, ...data.game } : g));
+                    }
+                })
+                .catch(() => {});
+        });
+
+        // Abort pending requests when page changes
+        return () => {
+            controller.abort();
+        };
+    }, [displayedGames, ingestGamesIntoIndex]);
+
     const activeCurrentPage = isAnyFilterActive ? filterPage : currentPage;
     const activeTotalPages = isSearching ? 1 : (isAnyFilterActive ? filterTotalPages : totalPages);
 
