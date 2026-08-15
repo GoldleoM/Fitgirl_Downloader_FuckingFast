@@ -312,7 +312,7 @@ def _generate_slug(url: str, title: str = '') -> str:
     return slug
 
 def _enrich_game_with_db_status(item):
-    """Adds resolved status, slug, and direct_links info from database to a game dict."""
+    """Adds resolved status, slug, direct_links info, and action hints from database to a game dict."""
     url = item.get('url', '')
     slug = item.get('slug')
     if not slug and url:
@@ -320,9 +320,16 @@ def _enrich_game_with_db_status(item):
     item['slug'] = slug
     
     db_game = firestore_db.get_game_by_slug(slug)
+    firestore_status = firestore_db.get_firestore_status()
+    
     if db_game:
-        item['resolved'] = bool(db_game.get('resolved') and db_game.get('direct_links'))
-        item['direct_links_count'] = len(db_game.get('direct_links', []))
+        direct_links = db_game.get('direct_links', [])
+        has_direct_links = bool(direct_links and len(direct_links) > 0)
+        is_resolved = bool(db_game.get('resolved') and has_direct_links)
+        
+        item['resolved'] = is_resolved
+        item['direct_links'] = direct_links
+        item['direct_links_count'] = len(direct_links)
         item['parts_count'] = db_game.get('parts_count') or len(db_game.get('fuckingfast_links', []))
         item['repack_size'] = db_game.get('repack_size') or item.get('repack_size', 'N/A')
         item['original_size'] = db_game.get('original_size') or item.get('original_size', 'N/A')
@@ -334,7 +341,9 @@ def _enrich_game_with_db_status(item):
             item['cover'] = db_game['cover']
     else:
         item['resolved'] = False
+        item['direct_links'] = []
         item['direct_links_count'] = 0
+        item['parts_count'] = 0
         item['repack_size'] = item.get('repack_size', 'N/A')
         item['requested'] = False
         item['request_count'] = 0
@@ -346,6 +355,23 @@ def _enrich_game_with_db_status(item):
         else:
             item['cover'] = '/placeholder.svg'
 
+    # Add quota status and explicit action hints for frontend
+    item['database_quota_exceeded'] = firestore_status['quota_exceeded']
+    item['database_status_message'] = firestore_status['message']
+    
+    has_direct_links = bool(item.get('direct_links') and len(item.get('direct_links', [])) > 0)
+    is_resolved = bool(item.get('resolved') and has_direct_links)
+    
+    if is_resolved:
+        item['available_action'] = 'download'
+        item['action_message'] = 'Direct links available - download via local downloader'
+    else:
+        item['available_action'] = 'priority_queue'
+        if firestore_status['quota_exceeded']:
+            item['action_message'] = firestore_status['message']
+        else:
+            item['action_message'] = 'Click to request priority link extraction'
+    
     return item
 
 @app.route('/api/catalog', methods=['GET'])
@@ -481,7 +507,11 @@ def api_suggest():
             'cover': cov,
             'repack_size': g.get('repack_size', 'N/A'),
             'resolved': bool(g.get('resolved')),
-            'parts_count': g.get('parts_count', 0)
+            'parts_count': g.get('parts_count', 0),
+            'direct_links_count': g.get('direct_links_count', 0),
+            'available_action': g.get('available_action', 'priority_queue'),
+            'action_message': g.get('action_message', ''),
+            'database_quota_exceeded': g.get('database_quota_exceeded', False)
         })
 
     return jsonify({'success': True, 'suggestions': results, 'query': query})
@@ -502,6 +532,32 @@ def api_game():
 
     # 1. Check database for existing game by slug
     db_game = firestore_db.get_game_by_slug(game_slug) if game_slug else None
+    firestore_status = firestore_db.get_firestore_status()
+
+    def game_response(game):
+        # This is intentionally per-response rather than persisted on the game:
+        # Firestore's daily quota resets, while game availability does not.
+        game = dict(game)
+        game['database_quota_exceeded'] = firestore_status['quota_exceeded']
+        game['database_status_message'] = firestore_status['message']
+        
+        # Explicit action hint for frontend:
+        # - "download": Game has direct links, show local downloader
+        # - "priority_queue": Game needs links, show priority queue button
+        has_direct_links = bool(game.get('direct_links') and len(game.get('direct_links', [])) > 0)
+        is_resolved = bool(game.get('resolved') and has_direct_links)
+        
+        if is_resolved:
+            game['available_action'] = 'download'
+            game['action_message'] = 'Direct links available - download via local downloader'
+        else:
+            game['available_action'] = 'priority_queue'
+            if firestore_status['quota_exceeded']:
+                game['action_message'] = firestore_status['message']  # "Database quota exceeded. Please try cloud links again tomorrow."
+            else:
+                game['action_message'] = 'Click to request priority link extraction'
+        
+        return jsonify({'success': True, 'game': game})
 
     # Check if db_game already has rich data (description & screenshots)
     has_rich_data = bool(db_game and (db_game.get('description') or (db_game.get('screenshots') and len(db_game['screenshots']) > 0)))
@@ -512,7 +568,7 @@ def api_game():
             db_game['cover'] = f"/api/game_cover?url={db_game.get('url', target_url)}"
         elif cov.startswith('http') and not cov.startswith('/api/image_proxy') and not cov.startswith('/api/game_cover'):
             db_game['cover'] = f"/api/image_proxy?url={cov}"
-        return jsonify({'success': True, 'game': db_game})
+        return game_response(db_game)
 
     # 2. Scrape full rich details (screenshots, description, requirements, accurate features)
     if target_url:
@@ -547,11 +603,11 @@ def api_game():
             except Exception as e:
                 print(f"[api_game] Error saving enriched game to Firestore: {e}")
                 
-            return jsonify({'success': True, 'game': details})
+            return game_response(details)
 
     # Fallback to existing db_game if scrape failed
     if db_game:
-        return jsonify({'success': True, 'game': db_game})
+        return game_response(db_game)
             
     return jsonify({'success': False, 'error': 'Could not fetch game details'}), 404
 
@@ -573,6 +629,22 @@ def api_request_game():
 
     # If game details or raw links aren't cached yet, fetch them from FitGirl
     existing = firestore_db.get_game_by_slug(game_slug)
+    if existing:
+        raw_parts = existing.get('fuckingfast_links') or []
+        direct_parts = existing.get('direct_links') or []
+        is_fully_resolved = bool(
+            existing.get('resolved')
+            and direct_parts
+            and (not raw_parts or len(direct_parts) >= len(raw_parts))
+        )
+        if is_fully_resolved:
+            return jsonify({
+                'success': False,
+                'error': 'Direct links are already available for this game.',
+                'reason': 'already_resolved',
+                'database_quota_exceeded': firestore_db.get_firestore_status()['quota_exceeded']
+            }), 409
+
     if (not existing or not existing.get('fuckingfast_links')) and game_url:
         try:
             details = fitgirl_scraper.get_game_details(game_url)
@@ -588,7 +660,8 @@ def api_request_game():
     return jsonify({
         'success': True,
         'message': f"'{result.get('title', game_slug)}' added to priority extraction queue!",
-        'data': result
+        'data': result,
+        'database_quota_exceeded': firestore_db.get_firestore_status()['quota_exceeded']
     })
 
 @app.route('/api/priority_queue', methods=['GET'])

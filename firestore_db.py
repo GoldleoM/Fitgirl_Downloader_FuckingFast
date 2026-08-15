@@ -6,6 +6,8 @@ from typing import List, Dict, Optional, Any
 
 _db = None
 _is_firebase_initialized = False
+_firestore_quota_exceeded = False
+_firestore_quota_message = ''
 LOCAL_DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games_db.json')
 
 SERVICE_ACCOUNT_CANDIDATES = [
@@ -129,6 +131,31 @@ def is_firestore_connected() -> bool:
     return init_firestore() is not None
 
 
+def _record_firestore_error(error: Exception) -> bool:
+    """Record Firestore quota exhaustion so callers can present a useful fallback."""
+    global _firestore_quota_exceeded, _firestore_quota_message
+    message = str(error)
+    normalized = message.lower()
+    is_quota_error = (
+        'resource_exhausted' in normalized
+        or 'quota exceeded' in normalized
+        or 'quota_exceeded' in normalized
+        or '429' in normalized
+    )
+    if is_quota_error:
+        _firestore_quota_exceeded = True
+        _firestore_quota_message = 'Database quota exceeded. Please try cloud links again tomorrow.'
+    return is_quota_error
+
+
+def get_firestore_status() -> Dict[str, Any]:
+    """Return whether Firestore is temporarily unavailable due to quota exhaustion."""
+    return {
+        'quota_exceeded': _firestore_quota_exceeded,
+        'message': _firestore_quota_message if _firestore_quota_exceeded else ''
+    }
+
+
 # --- Local JSON Fallback DB Helper ---
 def _load_local_db() -> Dict[str, Any]:
     if os.path.exists(LOCAL_DB_FILE):
@@ -191,6 +218,7 @@ def upsert_game(game_data: Dict[str, Any]) -> bool:
             doc_ref.set(game_data, merge=True)
             return True
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error upserting '{slug}': {e}")
             return False
 
@@ -206,6 +234,7 @@ def get_game_by_slug(slug: str) -> Optional[Dict[str, Any]]:
             if doc.exists:
                 return doc.to_dict()
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error getting game '{slug}': {e}")
 
     # Fallback to local DB
@@ -260,6 +289,7 @@ def request_game(slug: str, title: str = "", url: str = "") -> Dict[str, Any]:
             doc_ref = db.collection('games').document(slug)
             doc_ref.set(update_payload, merge=True)
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error requesting game '{slug}': {e}")
 
     merged = {**(existing or {}), **update_payload}
@@ -294,6 +324,7 @@ def get_priority_requested_games(limit: Optional[int] = None) -> List[Dict[str, 
                 if is_req and ff_links and (not is_resolved or len(dl_links) < len(ff_links)):
                     requested_games.append(data)
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error querying priority requested games: {e}")
 
     if not requested_games:
@@ -343,6 +374,7 @@ def get_unresolved_games(limit: Optional[int] = None, exclude_slugs: Optional[se
             if unresolved:
                 return unresolved
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error querying unresolved games: {e}")
 
     # Fallback to local DB
@@ -365,6 +397,7 @@ def get_unresolved_games(limit: Optional[int] = None, exclude_slugs: Optional[se
 def update_game_links(slug: str, direct_links: List[str], total_parts: Optional[int] = None) -> bool:
     """
     Updates the direct download links for a game and sets resolved = True only when all parts are present.
+    When fully resolved, clears the priority queue flags (requested, requested_at).
     """
     now_iso = datetime.utcnow().isoformat() + 'Z'
     
@@ -377,7 +410,8 @@ def update_game_links(slug: str, direct_links: List[str], total_parts: Optional[
 
     is_fully_resolved = bool(direct_links and len(direct_links) >= total_parts)
 
-    update_payload = {
+    # Payload for Firestore (uses DELETE_FIELD sentinel)
+    firestore_payload = {
         'direct_links': direct_links,
         'resolved': is_fully_resolved,
         'resolved_at': now_iso if is_fully_resolved else None,
@@ -385,10 +419,34 @@ def update_game_links(slug: str, direct_links: List[str], total_parts: Optional[
         'parts_count': total_parts
     }
 
+    # Payload for local DB
+    local_payload = {
+        'direct_links': direct_links,
+        'resolved': is_fully_resolved,
+        'resolved_at': now_iso if is_fully_resolved else None,
+        'updated_at': now_iso,
+        'parts_count': total_parts
+    }
+
+    # When fully resolved, clear the priority queue flags
+    if is_fully_resolved:
+        try:
+            from firebase_admin import firestore
+            firestore_payload['requested'] = firestore.DELETE_FIELD
+            firestore_payload['requested_at'] = firestore.DELETE_FIELD
+        except Exception:
+            # Fallback: set to False/None if DELETE_FIELD not available
+            firestore_payload['requested'] = False
+            firestore_payload['requested_at'] = None
+
     # 1. Update local DB
     local_data = _load_local_db()
     if slug in local_data.get('games', {}):
-        local_data['games'][slug].update(update_payload)
+        # Explicitly remove priority queue fields when fully resolved
+        if is_fully_resolved:
+            local_data['games'][slug].pop('requested', None)
+            local_data['games'][slug].pop('requested_at', None)
+        local_data['games'][slug].update(local_payload)
         _save_local_db(local_data)
 
     # 2. Update Firestore
@@ -396,9 +454,10 @@ def update_game_links(slug: str, direct_links: List[str], total_parts: Optional[
     if db:
         try:
             doc_ref = db.collection('games').document(slug)
-            doc_ref.update(update_payload)
+            doc_ref.update(firestore_payload)
             return True
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error updating links for '{slug}': {e}")
             return False
 
@@ -417,6 +476,7 @@ def get_all_popular_games(page: int = 1, per_page: int = 16) -> Dict[str, Any]:
             for doc in docs:
                 games_list.append(doc.to_dict())
         except Exception as e:
+            _record_firestore_error(e)
             print(f"[Firestore] Error fetching popular games: {e}")
 
     if not games_list:
@@ -1371,4 +1431,3 @@ def fuzzy_search_games(query: str, limit: int = 24, threshold: float = 0.55) -> 
     # Sort descending by similarity score, then by rank
     scored.sort(key=lambda x: (x[0], -x[1].get('rank', 9999)), reverse=True)
     return [game for score, game in scored[:limit]]
-

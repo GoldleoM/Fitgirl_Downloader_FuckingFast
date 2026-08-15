@@ -86,7 +86,7 @@ class HighSpeedGameResolver:
     def __init__(
         self,
         max_concurrency: int = 1,
-        request_delay: float = 1.2,
+        request_delay: float = 0.8,
         cooldown_seconds: float = 60.0,
         visible: bool = False
     ):
