@@ -1,6 +1,6 @@
 /**
  * Centralized Monetization & Affiliate Configuration
- * Update your links, wallet addresses, and ad parameters here anytime.
+ * Update your links and ad parameters here anytime.
  */
 
 export const MONETIZATION_CONFIG = {
@@ -15,41 +15,11 @@ export const MONETIZATION_CONFIG = {
         providerName: "Surfshark VPN",
     },
 
-    // 2. Creator Crypto Tip Jar & Donations
+    // 2. Creator Tip Jar & Donations
     donations: {
         enabled: true,
         buyMeACoffeeUrl: "https://buymeacoffee.com/goldleom",
-        kofiUrl: "https://ko-fi.com/goldleom",
-        cryptoWallets: [
-            {
-                currency: "USDT (TRC20)",
-                symbol: "USDT",
-                address: "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE", // Replace with your TRC20 address
-                network: "TRON (TRC20 - Low Fee)",
-                color: "#26a17b"
-            },
-            {
-                currency: "Bitcoin (BTC)",
-                symbol: "BTC",
-                address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", // Replace with your BTC address
-                network: "Bitcoin Native",
-                color: "#f7931a"
-            },
-            {
-                currency: "Ethereum (ETH / USDT ERC20)",
-                symbol: "ETH",
-                address: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F", // Replace with your EVM address
-                network: "Ethereum / Polygon / Arbitrum",
-                color: "#627eea"
-            },
-            {
-                currency: "Solana (SOL)",
-                symbol: "SOL",
-                address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", // Replace with your Solana address
-                network: "Solana Network",
-                color: "#14f195"
-            }
-        ]
+        kofiUrl: "https://ko-fi.com/goldleom"
     },
 
     // 3. Ad Network Banner (Adsterra / A-Ads)
