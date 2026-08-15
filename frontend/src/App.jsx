@@ -67,10 +67,6 @@ export default function App() {
         };
     }, []);
 
-    // Show maintenance screen if active
-    if (maintenanceActive) {
-        return <MaintenanceScreen />;
-    }
 
     // In-memory catalog index for 0ms instant fuzzy suggestions & local filtering
     const [localGamesIndex, setLocalGamesIndex] = useState(POPULAR_CATALOG || []);
@@ -526,6 +522,11 @@ export default function App() {
         setSearchResults(prev => prev.map(g => (g.slug === updatedGame.slug || g.url === updatedGame.url) ? { ...g, ...updatedGame } : g));
         setLocalGamesIndex(prev => prev.map(g => (g.slug === updatedGame.slug || g.url === updatedGame.url) ? { ...g, ...updatedGame } : g));
     }, []);
+
+    // Show maintenance screen if active
+    if (maintenanceActive) {
+        return <MaintenanceScreen />;
+    }
 
     return (
         <div className="app-root">

@@ -32,6 +32,10 @@ def save_config(config):
     FRONTEND_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(FRONTEND_CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
+    dist_file = Path(__file__).parent / "frontend" / "dist" / "maintenance.json"
+    if dist_file.parent.exists():
+        with open(dist_file, 'w') as f:
+            json.dump(config, f, indent=2)
 
 
 def clear_config():
@@ -39,6 +43,9 @@ def clear_config():
         CONFIG_FILE.unlink()
     if FRONTEND_CONFIG_FILE.exists():
         FRONTEND_CONFIG_FILE.unlink()
+    dist_file = Path(__file__).parent / "frontend" / "dist" / "maintenance.json"
+    if dist_file.exists():
+        dist_file.unlink()
 
 
 def start_maintenance(hours=None, message=None):
@@ -144,18 +151,19 @@ def show_countdown():
         print()
         
         while True:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if now >= end_time:
-                print("\n⏰ TIME'S UP! Maintenance should auto-recover.")
+                print("\n[TIME'S UP] Maintenance should auto-recover.")
                 break
             
             remaining = end_time - now
-            hours = int(remaining.total_seconds() // 3600)
+            days = int(remaining.total_seconds() // 86400)
+            hours = int((remaining.total_seconds() % 86400) // 3600)
             minutes = int((remaining.total_seconds() % 3600) // 60)
             seconds = int(remaining.total_seconds() % 60)
             
             # Colorful output
-            if hours > 1:
+            if days > 0 or hours > 1:
                 color = '\033[92m'  # Green
             elif hours > 0:
                 color = '\033[93m'  # Yellow
@@ -163,7 +171,7 @@ def show_countdown():
                 color = '\033[91m'  # Red
             
             reset = '\033[0m'
-            sys.stdout.write(f'\r{color}[TIMER] {hours:02d}:{minutes:02d}:{seconds:02d} remaining{reset}   ')
+            sys.stdout.write(f'\r{color}[TIMER] {days:02d}d : {hours:02d}h : {minutes:02d}m : {seconds:02d}s remaining{reset}   ')
             sys.stdout.flush()
             time.sleep(1)
         

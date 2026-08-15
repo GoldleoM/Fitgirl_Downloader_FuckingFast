@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 
 export default function MaintenanceScreen() {
     const [timeRemaining, setTimeRemaining] = useState(0);
-    const [message, setMessage] = useState('Website will be back in {time_remaining}');
     const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
@@ -14,7 +13,6 @@ export default function MaintenanceScreen() {
                 // Fetch from static JSON file (works on Firebase Hosting)
                 const res = await fetch('/maintenance.json', { cache: 'no-store' });
                 if (!res.ok) {
-                    // No maintenance file = no maintenance
                     if (mounted) {
                         setTimeRemaining(0);
                         setLoaded(true);
@@ -28,9 +26,7 @@ export default function MaintenanceScreen() {
                     const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
                     if (remaining > 0) {
                         setTimeRemaining(remaining);
-                        setMessage(data.message || 'Website will be back in {time_remaining}');
                     } else {
-                        // Expired - reload to check again
                         window.location.reload();
                     }
                 } else if (mounted) {
@@ -50,7 +46,6 @@ export default function MaintenanceScreen() {
         intervalId = setInterval(() => {
             setTimeRemaining(prev => {
                 if (prev <= 1) {
-                    // Time's up - reload page to check if maintenance ended
                     window.location.reload();
                     return 0;
                 }
@@ -64,13 +59,6 @@ export default function MaintenanceScreen() {
         };
     }, []);
 
-    const formatTime = (seconds) => {
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
-
     if (!loaded) {
         return (
             <div className="maintenance-loader">
@@ -80,39 +68,69 @@ export default function MaintenanceScreen() {
     }
 
     if (timeRemaining <= 0) {
-        return null; // Parent will handle showing normal site
+        return null;
     }
 
-    const displayMessage = message.replace('{time_remaining}', formatTime(timeRemaining));
+    const days = Math.floor(timeRemaining / 86400);
+    const hours = Math.floor((timeRemaining % 86400) / 3600);
+    const minutes = Math.floor((timeRemaining % 3600) / 60);
+    const seconds = timeRemaining % 60;
+
+    const pad = (n) => String(n).padStart(2, '0');
 
     return (
-        <div className="maintenance-screen" role="main" aria-live="polite">
-            <div className="maintenance-bg">
-                <div className="ambient-orb orb-1"></div>
-                <div className="ambient-orb orb-2"></div>
-                <div className="ambient-orb orb-3"></div>
-                <div className="grid-overlay"></div>
+        <div className="doomsday-maintenance-screen" role="main" aria-live="polite">
+            {/* Cinematic Background with Emerald Glow & Vignette */}
+            <div className="doomsday-bg">
+                <div className="doomsday-bg-image" style={{ backgroundImage: "url('/doomsday_bg.jpg')" }}></div>
+                <div className="doomsday-overlay"></div>
+                <div className="doomsday-mist mist-1"></div>
+                <div className="doomsday-mist mist-2"></div>
+                <div className="doomsday-vignette"></div>
+                <div className="cinematic-letterbox-top"></div>
+                <div className="cinematic-letterbox-bottom"></div>
             </div>
-            
-            <div className="maintenance-content">
-                <div className="maintenance-icon" aria-hidden="true">
-                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                    </svg>
+
+            {/* Central Cinematic Content */}
+            <div className="doomsday-content">
+                {/* Countdown Display */}
+                <div 
+                    className="doomsday-timer" 
+                    aria-label={`Time remaining: ${days} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds`}
+                >
+                    <div className="timer-segment">
+                        <span className="timer-digit">{pad(days)}</span>
+                        <span className="timer-label">DAYS</span>
+                    </div>
+                    <span className="timer-separator" aria-hidden="true">:</span>
+                    
+                    <div className="timer-segment">
+                        <span className="timer-digit">{pad(hours)}</span>
+                        <span className="timer-label">HOURS</span>
+                    </div>
+                    <span className="timer-separator" aria-hidden="true">:</span>
+                    
+                    <div className="timer-segment">
+                        <span className="timer-digit">{pad(minutes)}</span>
+                        <span className="timer-label">MINUTES</span>
+                    </div>
+                    <span className="timer-separator" aria-hidden="true">:</span>
+                    
+                    <div className="timer-segment">
+                        <span className="timer-digit">{pad(seconds)}</span>
+                        <span className="timer-label">SECONDS</span>
+                    </div>
                 </div>
-                
-                <h1 className="maintenance-title">MAINTENANCE MODE</h1>
-                
-                <div className="maintenance-timer" aria-label={`Time remaining: ${formatTime(timeRemaining)}`}>
-                    <span className="timer-value">{formatTime(timeRemaining)}</span>
-                    <span className="timer-label">HOURS : MINUTES : SECONDS</span>
-                </div>
-                
-                <p className="maintenance-message">{displayMessage}</p>
-                
-                <div className="maintenance-progress" role="progressbar" aria-valuenow={0} aria-valuemin={0} aria-valuemax={100}>
-                    <div className="progress-bar" style={{ width: '0%' }}></div>
+
+                {/* Subtitle / Cinematic Tag */}
+                <div className="doomsday-footer-tag">
+                    <div className="cinematic-badge">
+                        <span>FITBOY WILL RETURN IN AVENGERS DOOMSDAY</span>
+                    </div>
+                    <div className="cinematic-credit">
+                        <span className="marvel-logo">MARVEL</span>
+                        <span className="credit-text">© 2026 MARVEL</span>
+                    </div>
                 </div>
             </div>
         </div>
