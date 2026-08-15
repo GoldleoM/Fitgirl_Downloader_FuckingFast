@@ -96,7 +96,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const repackSize = activeGame.repack_size || 'Repack';
     const originalSize = activeGame.original_size || '';
     const coverUrl = formatCoverUrl(activeGame.cover);
-    const screenshots = activeGame.screenshots || [];
+    const screenshots = (activeGame.screenshots || []).map(formatCoverUrl).filter(Boolean);
     const description = activeGame.description || '';
     const genres = activeGame.genres || '';
     const companies = activeGame.companies || '';
@@ -185,6 +185,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                 className="hub-poster-img"
                                 src={coverUrl}
                                 alt={activeGame.title}
+                                referrerPolicy="no-referrer"
                                 onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.svg'; }}
                             />
                             <div className="hub-poster-glow"></div>
@@ -319,6 +320,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                         src={screenshots[activeScreenshotIdx]}
                                         alt={`${activeGame.title} screenshot ${activeScreenshotIdx + 1}`}
                                         className="screenshot-main-img"
+                                        referrerPolicy="no-referrer"
                                         onClick={() => setIsLightboxOpen(true)}
                                         title="Click to expand"
                                         onError={(e) => { e.target.style.display = 'none'; }}
@@ -343,7 +345,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                                 className={`screenshot-thumb-btn ${idx === activeScreenshotIdx ? 'active' : ''}`}
                                                 onClick={() => setActiveScreenshotIdx(idx)}
                                             >
-                                                <img src={s} alt={`Thumb ${idx + 1}`} onError={(e) => { e.target.style.display = 'none'; }} />
+                                                <img src={s} alt={`Thumb ${idx + 1}`} referrerPolicy="no-referrer" onError={(e) => { e.target.style.display = 'none'; }} />
                                             </button>
                                         ))}
                                     </div>
@@ -529,6 +531,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                         src={screenshots[activeScreenshotIdx]}
                         alt="Enlarged screenshot"
                         className="lightbox-img"
+                        referrerPolicy="no-referrer"
                         onClick={(e) => e.stopPropagation()}
                     />
                 </div>

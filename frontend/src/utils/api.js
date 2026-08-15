@@ -19,16 +19,21 @@ export function formatApiUrl(path) {
 
 export function formatCoverUrl(url) {
     if (!url || url === 'None' || url === 'null') return '/placeholder.svg';
-    if (url.startsWith('/api/')) return formatApiUrl(url);
-    if (url.startsWith('/static/')) return formatApiUrl(url);
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-        // If it's already an API proxy call, format with formatApiUrl
-        if (url.includes('/api/image_proxy') || url.includes('/api/game_cover')) {
-            return url;
+
+    // If it's wrapped in an image proxy parameter, unwrap to direct CDN URL
+    if (typeof url === 'string' && url.includes('/api/image_proxy?url=')) {
+        const match = url.match(/[?&]url=([^&]+)/);
+        if (match) {
+            return decodeURIComponent(match[1]).replace('http://', 'https://');
         }
-        // Route through backend proxy to bypass ImageBan/FastPic rate-limits and anti-hotlinking
-        return formatApiUrl(`/api/image_proxy?url=${encodeURIComponent(url)}`);
     }
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url.replace('http://', 'https://');
+    }
+
+    if (url.startsWith('/static/')) return formatApiUrl(url);
+    if (url.startsWith('/api/')) return formatApiUrl(url);
     return url;
 }
 

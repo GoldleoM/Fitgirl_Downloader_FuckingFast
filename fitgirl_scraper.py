@@ -389,7 +389,7 @@ def get_game_details(game_url):
                         if high_res != cover and high_res not in raw_screenshots:
                             raw_screenshots.append(high_res)
                             
-        screenshots = [f"/api/image_proxy?url={s}" for s in raw_screenshots[:8]]
+        screenshots = [s.replace('http://', 'https://') for s in raw_screenshots[:8]]
 
         # 4. Metadata (Genres, Companies, Languages, Sizes)
         full_text = content.text
