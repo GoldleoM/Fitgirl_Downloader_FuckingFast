@@ -13,18 +13,19 @@ import { apiFetch } from './utils/api';
 import { getInstantLocalSuggestions } from './utils/fuzzySearch';
 import { parseSizeInGB } from './utils/parser';
 import { GENRE_KEYWORDS, isAdultGame } from './data/genreKeywords';
+import { POPULAR_CATALOG } from './data/popularCatalog';
 
 export default function App() {
     // In-memory catalog index for 0ms instant fuzzy suggestions & local filtering
-    const [localGamesIndex, setLocalGamesIndex] = useState([]);
+    const [localGamesIndex, setLocalGamesIndex] = useState(POPULAR_CATALOG || []);
 
     // View & Navigation State
     const [currentMode, setCurrentMode] = useState('popular'); // 'popular' | 'latest'
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [catalogGames, setCatalogGames] = useState([]);
+    const [totalPages, setTotalPages] = useState(POPULAR_CATALOG ? Math.ceil(POPULAR_CATALOG.length / 16) : 1);
+    const [catalogGames, setCatalogGames] = useState((POPULAR_CATALOG && POPULAR_CATALOG.slice(0, 16)) || []);
     const [searchResults, setSearchResults] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -228,6 +229,17 @@ export default function App() {
         setIsLoading(true);
         try {
             if (mode === 'popular') {
+                if (POPULAR_CATALOG && POPULAR_CATALOG.length > 0) {
+                    const start = (page - 1) * 16;
+                    const items = POPULAR_CATALOG.slice(start, start + 16);
+                    if (items.length > 0) {
+                        setCatalogGames(items);
+                        setCurrentPage(page);
+                        setTotalPages(Math.ceil(POPULAR_CATALOG.length / 16));
+                        setIsLoading(false);
+                        return;
+                    }
+                }
                 const res = await apiFetch(`/api/popular?page=${page}&per_page=16`);
                 const data = await res.json();
                 if (data.success && data.results) {
@@ -251,7 +263,14 @@ export default function App() {
                 }
             }
         } catch (err) {
-            setCatalogGames([]);
+            if (mode === 'popular' && POPULAR_CATALOG && POPULAR_CATALOG.length > 0) {
+                const start = (page - 1) * 16;
+                setCatalogGames(POPULAR_CATALOG.slice(start, start + 16));
+                setCurrentPage(page);
+                setTotalPages(Math.ceil(POPULAR_CATALOG.length / 16));
+            } else {
+                setCatalogGames([]);
+            }
         } finally {
             setIsLoading(false);
         }

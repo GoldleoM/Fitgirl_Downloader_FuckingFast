@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
 import { isAdultGame } from '../data/genreKeywords';
+import { POPULAR_CATALOG } from '../data/popularCatalog';
 
 export default function GameModal({ isOpen, game, onClose, onStartDownload, onGameUpdate }) {
     const [fullGameData, setFullGameData] = useState(null);
@@ -55,6 +56,16 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
             return;
         }
 
+        // 1. Instant 0ms lookup from pre-warmed rich catalog containing full Steam PC specs
+        const cached = POPULAR_CATALOG && POPULAR_CATALOG.find(g => 
+            (game.slug && g.slug === game.slug) || 
+            (game.url && g.url === game.url) || 
+            (game.title && g.title.toLowerCase() === game.title.toLowerCase())
+        );
+        if (cached) {
+            setFullGameData(cached);
+        }
+
         let isMounted = true;
         const fetchDetails = async () => {
             try {
@@ -62,7 +73,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                 const res = await apiFetch(`/api/game?${param}`);
                 const data = await res.json();
                 if (isMounted && data.success && data.game) {
-                    setFullGameData(data.game);
+                    setFullGameData(prev => ({ ...(prev || {}), ...data.game }));
                     if (onGameUpdate) {
                         onGameUpdate(data.game);
                     }
@@ -394,7 +405,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                         </div>
 
                         {/* Official PC System Requirements 2-Column Board (Minimum & Recommended) */}
-                        {(requirements.minimum || requirements.recommended || requirements.ram || requirements.hdd) && (
+                        {(requirements.minimum?.graphics || requirements.recommended?.graphics || requirements.minimum?.processor || requirements.recommended?.processor || requirements.ram || requirements.hdd) && (
                             <div className="hub-section steam-specs-board">
                                 <div className="steam-specs-header">
                                     <h4 className="steam-specs-title">SYSTEM REQUIREMENTS</h4>
@@ -405,14 +416,14 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                     <div className="steam-specs-col">
                                         <h5 className="specs-col-heading">MINIMUM:</h5>
                                         <ul className="specs-entries-list">
-                                            {(requirements.minimum?.os || 'Windows 10 (64-bit)') && (
-                                                <li><strong>OS:</strong> <span>{requirements.minimum?.os || 'Windows 10 (64-bit)'}</span></li>
+                                            {requirements.minimum?.os && (
+                                                <li><strong>OS:</strong> <span>{requirements.minimum.os}</span></li>
                                             )}
                                             {requirements.minimum?.processor && (
                                                 <li><strong>Processor:</strong> <span>{requirements.minimum.processor}</span></li>
                                             )}
-                                            {(requirements.minimum?.memory || requirements.ram) && (
-                                                <li><strong>Memory:</strong> <span>{requirements.minimum?.memory || requirements.ram}</span></li>
+                                            {requirements.minimum?.memory && (
+                                                <li><strong>Memory:</strong> <span>{requirements.minimum.memory}</span></li>
                                             )}
                                             {requirements.minimum?.graphics && (
                                                 <li><strong>Graphics:</strong> <span>{requirements.minimum.graphics}</span></li>
@@ -420,14 +431,20 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                             {requirements.minimum?.directx && (
                                                 <li><strong>DirectX:</strong> <span>{requirements.minimum.directx}</span></li>
                                             )}
-                                            {(requirements.minimum?.storage || requirements.hdd) && (
-                                                <li><strong>Storage:</strong> <span>{requirements.minimum?.storage || requirements.hdd}</span></li>
+                                            {requirements.minimum?.storage && (
+                                                <li><strong>Storage:</strong> <span>{requirements.minimum.storage}</span></li>
                                             )}
                                             {requirements.minimum?.['sound card'] && (
                                                 <li><strong>Sound Card:</strong> <span>{requirements.minimum['sound card']}</span></li>
                                             )}
                                             {requirements.minimum?.['additional notes'] && (
                                                 <li><strong>Additional Notes:</strong> <span>{requirements.minimum['additional notes']}</span></li>
+                                            )}
+                                            {!requirements.minimum?.graphics && requirements.ram && (
+                                                <li><strong>Memory:</strong> <span>{requirements.ram}</span></li>
+                                            )}
+                                            {!requirements.minimum?.graphics && requirements.hdd && (
+                                                <li><strong>Storage:</strong> <span>{requirements.hdd}</span></li>
                                             )}
                                         </ul>
                                     </div>
@@ -436,14 +453,14 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                     <div className="steam-specs-col">
                                         <h5 className="specs-col-heading">RECOMMENDED:</h5>
                                         <ul className="specs-entries-list">
-                                            {(requirements.recommended?.os || 'Windows 10/11 (64-bit)') && (
-                                                <li><strong>OS:</strong> <span>{requirements.recommended?.os || 'Windows 10/11 (64-bit)'}</span></li>
+                                            {requirements.recommended?.os && (
+                                                <li><strong>OS:</strong> <span>{requirements.recommended.os}</span></li>
                                             )}
                                             {requirements.recommended?.processor && (
                                                 <li><strong>Processor:</strong> <span>{requirements.recommended.processor}</span></li>
                                             )}
-                                            {(requirements.recommended?.memory || requirements.ram) && (
-                                                <li><strong>Memory:</strong> <span>{requirements.recommended?.memory || requirements.ram}</span></li>
+                                            {requirements.recommended?.memory && (
+                                                <li><strong>Memory:</strong> <span>{requirements.recommended.memory}</span></li>
                                             )}
                                             {requirements.recommended?.graphics && (
                                                 <li><strong>Graphics:</strong> <span>{requirements.recommended.graphics}</span></li>
@@ -451,14 +468,20 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                             {requirements.recommended?.directx && (
                                                 <li><strong>DirectX:</strong> <span>{requirements.recommended.directx}</span></li>
                                             )}
-                                            {(requirements.recommended?.storage || requirements.hdd) && (
-                                                <li><strong>Storage:</strong> <span>{requirements.recommended?.storage || requirements.hdd}</span></li>
+                                            {requirements.recommended?.storage && (
+                                                <li><strong>Storage:</strong> <span>{requirements.recommended.storage}</span></li>
                                             )}
                                             {requirements.recommended?.['sound card'] && (
                                                 <li><strong>Sound Card:</strong> <span>{requirements.recommended['sound card']}</span></li>
                                             )}
                                             {requirements.recommended?.['additional notes'] && (
                                                 <li><strong>Additional Notes:</strong> <span>{requirements.recommended['additional notes']}</span></li>
+                                            )}
+                                            {!requirements.recommended?.graphics && requirements.ram && (
+                                                <li><strong>Memory:</strong> <span>{requirements.ram}</span></li>
+                                            )}
+                                            {!requirements.recommended?.graphics && requirements.hdd && (
+                                                <li><strong>Storage:</strong> <span>{requirements.hdd}</span></li>
                                             )}
                                         </ul>
                                     </div>
