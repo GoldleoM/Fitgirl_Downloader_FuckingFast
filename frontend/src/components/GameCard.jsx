@@ -44,7 +44,10 @@ export default function GameCard({ game, onSelect, style }) {
                     </span>
                 </div>
                 <div className="card-footer">
-                    <button className="btn-get" onClick={() => onSelect(game)}>
+                    <button
+                        className={`btn-get ${isResolved ? 'btn-instant' : 'btn-details'}`}
+                        onClick={() => onSelect(game)}
+                    >
                         {btnIcon}
                         <span>{btnText}</span>
                     </button>
