@@ -795,6 +795,136 @@ def api_copy_clipboard():
     
     return jsonify({'success': False, 'error': 'No links available. Extract links first.'}), 400
 
+# ============================================================================
+#  ADMIN API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/admin/stats')
+def admin_stats():
+    """Get overall platform statistics for admin dashboard."""
+    try:
+        db = firestore_db.get_db()
+        if not db:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 503
+
+        # Count games
+        games_ref = db.collection('games')
+        all_games = list(games_ref.stream())
+        total_games = len(all_games)
+
+        resolved_games = 0
+        total_links = 0
+        for doc in all_games:
+            data = doc.to_dict()
+            links = data.get('direct_links', [])
+            if links and len(links) > 0:
+                resolved_games += 1
+                total_links += len(links)
+
+        # Count pending requests
+        requests_ref = db.collection('game_requests')
+        pending_requests = len(list(requests_ref.stream()))
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_games': total_games,
+                'resolved_games': resolved_games,
+                'pending_requests': pending_requests,
+                'total_links': total_links
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/requests')
+def admin_requests():
+    """Get all pending game link requests."""
+    try:
+        db = firestore_db.get_db()
+        if not db:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 503
+
+        requests_ref = db.collection('game_requests').order_by('request_count', direction='DESCENDING')
+        docs = list(requests_ref.stream())
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            data['id'] = doc.id
+            results.append(data)
+
+        return jsonify({'success': True, 'requests': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/prioritize', methods=['POST'])
+def admin_prioritize():
+    """Move a game request to high priority in the resolution queue."""
+    try:
+        body = request.get_json(silent=True) or {}
+        slug = body.get('slug', '')
+        if not slug:
+            return jsonify({'success': False, 'error': 'Missing slug'}), 400
+
+        db = firestore_db.get_db()
+        if not db:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 503
+
+        req_ref = db.collection('game_requests').document(slug)
+        req_ref.set({'priority': True, 'prioritized_at': time.time()}, merge=True)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/dismiss-request', methods=['POST'])
+def admin_dismiss_request():
+    """Remove a game request from the queue."""
+    try:
+        body = request.get_json(silent=True) or {}
+        slug = body.get('slug', '')
+        if not slug:
+            return jsonify({'success': False, 'error': 'Missing slug'}), 400
+
+        db = firestore_db.get_db()
+        if not db:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 503
+
+        db.collection('game_requests').document(slug).delete()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/update-game', methods=['POST'])
+def admin_update_game():
+    """Update game metadata (title, genres, description)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        slug = body.get('slug', '')
+        if not slug:
+            return jsonify({'success': False, 'error': 'Missing slug'}), 400
+
+        db = firestore_db.get_db()
+        if not db:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 503
+
+        update_data = {}
+        for field in ['title', 'genres', 'description']:
+            if field in body:
+                update_data[field] = body[field]
+
+        if update_data:
+            game_ref = db.collection('games').document(slug)
+            game_ref.set(update_data, merge=True)
+
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):

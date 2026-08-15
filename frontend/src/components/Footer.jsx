@@ -1,13 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { ExternalLink, ArrowUp, Zap, Code2, ShieldCheck, Heart, Gamepad2, Download, HelpCircle, ChevronDown, ChevronUp, Cpu, Server, Sparkles } from 'lucide-react';
 
-export default function Footer({ onNavigateHome }) {
+export default function Footer({ onNavigateHome, onAdminTrigger }) {
     const currentYear = new Date().getFullYear();
     const githubUser = "GoldleoM";
     const githubProfileUrl = `https://github.com/${githubUser}`;
     const githubRepoUrl = `https://github.com/${githubUser}/Fitgirl_Downloader_FuckingFast`;
 
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
+    const clickCountRef = useRef(0);
+    const clickTimerRef = useRef(null);
+
+    const handleCopyrightClick = useCallback(() => {
+        clickCountRef.current += 1;
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+        if (clickCountRef.current >= 7) {
+            clickCountRef.current = 0;
+            if (onAdminTrigger) onAdminTrigger();
+            return;
+        }
+        clickTimerRef.current = setTimeout(() => {
+            clickCountRef.current = 0;
+        }, 2000);
+    }, [onAdminTrigger]);
+
 
     const toggleFaq = (idx) => {
         setOpenFaqIndex(openFaqIndex === idx ? null : idx);
@@ -146,7 +162,7 @@ export default function Footer({ onNavigateHome }) {
 
                 {/* Bottom Row: Copyright & Creator info */}
                 <div className="footer-bottom-row">
-                    <div className="footer-copyright">
+                    <div className="footer-copyright" onClick={handleCopyrightClick} style={{ cursor: 'default', userSelect: 'none' }}>
                         <span>© {currentYear} <strong>FitBoy PRO</strong>. Released under open-source license.</span>
                     </div>
 

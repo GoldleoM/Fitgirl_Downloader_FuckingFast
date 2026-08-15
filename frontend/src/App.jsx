@@ -8,12 +8,15 @@ import Pagination from './components/Pagination';
 import GameModal from './components/GameModal';
 import DownloadDrawer from './components/DownloadDrawer';
 import Footer from './components/Footer';
+import AdminLogin from './components/AdminLogin';
+import AdminPanel from './components/AdminPanel';
 
 import { apiFetch } from './utils/api';
 import { getInstantLocalSuggestions } from './utils/fuzzySearch';
 import { parseSizeInGB } from './utils/parser';
 import { GENRE_KEYWORDS, isAdultGame } from './data/genreKeywords';
 import { POPULAR_CATALOG } from './data/popularCatalog';
+import { useAdminAuth } from './hooks/useAdminAuth';
 
 export default function App() {
     // In-memory catalog index for 0ms instant fuzzy suggestions & local filtering
@@ -47,6 +50,19 @@ export default function App() {
     // Modals & Drawers
     const [selectedGameModal, setSelectedGameModal] = useState(null);
     const [activeJobDrawer, setActiveJobDrawer] = useState(null);
+
+    // Admin Auth & UI
+    const { adminUser, isAdminLoading, adminError, adminLogin, adminLogout, setAdminError } = useAdminAuth();
+    const [showAdminLogin, setShowAdminLogin] = useState(false);
+    const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+    const handleAdminTrigger = useCallback(() => {
+        if (adminUser) {
+            setShowAdminPanel(true);
+        } else {
+            setShowAdminLogin(true);
+        }
+    }, [adminUser]);
 
     const isAnyFilterActive = filters.genre !== 'all' || filters.mode !== 'all' || filters.size !== 'all' || filters.status !== 'all';
 
@@ -515,7 +531,7 @@ export default function App() {
             </main>
 
             {/* Footer */}
-            <Footer onNavigateHome={handleNavigateHome} />
+            <Footer onNavigateHome={handleNavigateHome} onAdminTrigger={handleAdminTrigger} />
 
             {/* Game Details Modal */}
             <GameModal
@@ -531,6 +547,33 @@ export default function App() {
                 isOpen={!!activeJobDrawer}
                 jobData={activeJobDrawer}
                 onClose={() => setActiveJobDrawer(null)}
+            />
+
+            {/* Hidden Admin Login Modal */}
+            <AdminLogin
+                isOpen={showAdminLogin}
+                onClose={() => setShowAdminLogin(false)}
+                onLogin={async (email, password) => {
+                    const ok = await adminLogin(email, password);
+                    if (ok) {
+                        setShowAdminLogin(false);
+                        setShowAdminPanel(true);
+                    }
+                    return ok;
+                }}
+                error={adminError}
+                setError={setAdminError}
+            />
+
+            {/* Admin Panel */}
+            <AdminPanel
+                isOpen={showAdminPanel}
+                onClose={() => setShowAdminPanel(false)}
+                adminUser={adminUser}
+                onLogout={async () => {
+                    await adminLogout();
+                    setShowAdminPanel(false);
+                }}
             />
         </div>
     );
