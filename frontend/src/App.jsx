@@ -10,6 +10,7 @@ import DownloadDrawer from './components/DownloadDrawer';
 import Footer from './components/Footer';
 import AdminLogin from './components/AdminLogin';
 import AdminPanel from './components/AdminPanel';
+import MaintenanceScreen from './components/MaintenanceScreen';
 
 import { apiFetch } from './utils/api';
 import { getInstantLocalSuggestions } from './utils/fuzzySearch';
@@ -19,6 +20,58 @@ import { POPULAR_CATALOG } from './data/popularCatalog';
 import { useAdminAuth } from './hooks/useAdminAuth';
 
 export default function App() {
+    // Maintenance mode state
+    const [maintenanceActive, setMaintenanceActive] = useState(false);
+    
+    // Check maintenance status on mount
+    useEffect(() => {
+        let mounted = true;
+        let intervalId = null;
+        
+        const checkMaintenance = async () => {
+            try {
+                // Fetch from static JSON file (works on Firebase Hosting)
+                const res = await fetch('/maintenance.json', { cache: 'no-store' });
+                if (!res.ok) {
+                    // No maintenance file = no maintenance
+                    if (mounted) setMaintenanceActive(false);
+                    return;
+                }
+                const data = await res.json();
+                if (mounted && data.active) {
+                    const endTime = new Date(data.end_time).getTime();
+                    const now = Date.now();
+                    if (endTime > now) {
+                        setMaintenanceActive(true);
+                    } else {
+                        // Expired - reload to clear
+                        window.location.reload();
+                    }
+                } else if (mounted) {
+                    setMaintenanceActive(false);
+                }
+            } catch (e) {
+                console.error('Maintenance check failed:', e);
+                if (mounted) setMaintenanceActive(false);
+            }
+        };
+        
+        checkMaintenance();
+        
+        // Re-check every 30 seconds in case maintenance was started while page open
+        intervalId = setInterval(checkMaintenance, 30000);
+        
+        return () => {
+            mounted = false;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, []);
+
+    // Show maintenance screen if active
+    if (maintenanceActive) {
+        return <MaintenanceScreen />;
+    }
+
     // In-memory catalog index for 0ms instant fuzzy suggestions & local filtering
     const [localGamesIndex, setLocalGamesIndex] = useState(POPULAR_CATALOG || []);
 

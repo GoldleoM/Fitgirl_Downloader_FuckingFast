@@ -2,6 +2,7 @@ import os
 import sys
 import uuid
 import time
+import json
 import socket
 import ipaddress
 import threading
@@ -9,6 +10,7 @@ import concurrent.futures
 import tempfile
 import urllib.parse
 import requests
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, Response, make_response, redirect
 from flask_cors import CORS
 import fitgirl_scraper
@@ -40,6 +42,42 @@ IMAGE_CACHE = {}
 RATE_LIMIT_STORE = {}
 RATE_LIMIT_LOCK = threading.Lock()
 MAX_REQUESTS_PER_MINUTE = 150
+
+# Maintenance mode state (persisted to local JSON for Vercel/serverless compatibility)
+MAINTENANCE_FILE = os.path.join(TMP_DIR, 'maintenance_state.json')
+
+def _load_maintenance_state():
+    if os.path.exists(MAINTENANCE_FILE):
+        try:
+            with open(MAINTENANCE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {'active': False}
+
+def _save_maintenance_state(state):
+    try:
+        with open(MAINTENANCE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"[Maintenance] Error saving state: {e}")
+
+def is_maintenance_active():
+    """Check if maintenance mode is currently active."""
+    state = _load_maintenance_state()
+    if not state.get('active'):
+        return False, {}
+    
+    try:
+        end_time = datetime.fromisoformat(state['end_time'].replace('Z', '+00:00'))
+        if datetime.utcnow() >= end_time:
+            # Expired - auto-disable
+            state['active'] = False
+            _save_maintenance_state(state)
+            return False, {}
+        return True, state
+    except Exception:
+        return False, {}
 
 
 def _normalized_url_set(urls):
@@ -1062,6 +1100,103 @@ def admin_update_game():
             game_ref.set(update_data, merge=True)
 
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+#  MAINTENANCE MODE API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/maintenance/status')
+def maintenance_status():
+    """Get current maintenance mode status."""
+    active, state = is_maintenance_active()
+    if active:
+        end_time = datetime.fromisoformat(state['end_time'].replace('Z', '+00:00'))
+        remaining = end_time - datetime.utcnow()
+        return jsonify({
+            'success': True,
+            'active': True,
+            'end_time': state['end_time'],
+            'message': state.get('message', 'Website under maintenance'),
+            'remaining_seconds': max(0, int(remaining.total_seconds()))
+        })
+    return jsonify({'success': True, 'active': False})
+
+
+@app.route('/api/maintenance/start', methods=['POST'])
+def maintenance_start():
+    """Start maintenance mode with specified duration in hours."""
+    try:
+        body = request.get_json(silent=True) or {}
+        hours = body.get('hours', 24)
+        message = body.get('message', 'Website will be back in {time_remaining}')
+        
+        if not isinstance(hours, (int, float)) or hours <= 0:
+            return jsonify({'success': False, 'error': 'Invalid hours value'}), 400
+        if hours > 168:  # Max 1 week
+            return jsonify({'success': False, 'error': 'Maximum duration is 168 hours (1 week)'}), 400
+        
+        start_time = datetime.utcnow()
+        end_time = start_time + timedelta(hours=hours)
+        
+        state = {
+            'active': True,
+            'start_time': start_time.isoformat() + 'Z',
+            'end_time': end_time.isoformat() + 'Z',
+            'duration_hours': hours,
+            'message': message
+        }
+        _save_maintenance_state(state)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Maintenance mode started for {hours} hours',
+            'end_time': state['end_time'],
+            'remaining_seconds': int(hours * 3600)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/maintenance/stop', methods=['POST'])
+def maintenance_stop():
+    """Stop maintenance mode immediately."""
+    try:
+        state = {'active': False}
+        _save_maintenance_state(state)
+        return jsonify({'success': True, 'message': 'Maintenance mode stopped'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/maintenance/extend', methods=['POST'])
+def maintenance_extend():
+    """Extend maintenance mode by additional hours."""
+    try:
+        body = request.get_json(silent=True) or {}
+        hours = body.get('hours', 24)
+        
+        if not isinstance(hours, (int, float)) or hours <= 0:
+            return jsonify({'success': False, 'error': 'Invalid hours value'}), 400
+        
+        current_state = _load_maintenance_state()
+        if not current_state.get('active'):
+            return jsonify({'success': False, 'error': 'No active maintenance to extend'}), 400
+        
+        current_end = datetime.fromisoformat(current_state['end_time'].replace('Z', '+00:00'))
+        new_end = current_end + timedelta(hours=hours)
+        
+        current_state['end_time'] = new_end.isoformat() + 'Z'
+        current_state['duration_hours'] = current_state.get('duration_hours', 0) + hours
+        _save_maintenance_state(current_state)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Maintenance extended by {hours} hours',
+            'end_time': current_state['end_time']
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

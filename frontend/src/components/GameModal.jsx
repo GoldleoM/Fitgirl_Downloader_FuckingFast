@@ -57,9 +57,9 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
         }
 
         // 1. Instant 0ms lookup from pre-warmed rich catalog containing full Steam PC specs
-        const cached = POPULAR_CATALOG && POPULAR_CATALOG.find(g => 
-            (game.slug && g.slug === game.slug) || 
-            (game.url && g.url === game.url) || 
+        const cached = POPULAR_CATALOG && POPULAR_CATALOG.find(g =>
+            (game.slug && g.slug === game.slug) ||
+            (game.url && g.url === game.url) ||
             (game.title && g.title.toLowerCase() === game.title.toLowerCase())
         );
         if (cached) {
@@ -93,7 +93,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                         onGameUpdate(data.game);
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
         };
 
         fetchDetails();
@@ -136,6 +136,8 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
 
     const isRequested = activeGame.requested || requestSuccess;
     const requestCount = (activeGame.request_count || 0) + (requestSuccess && !activeGame.requested ? 1 : 0);
+    const databaseQuotaExceeded = Boolean(activeGame.database_quota_exceeded);
+    const databaseStatusMessage = activeGame.database_status_message || 'Database quota exceeded. Cloud link extraction will be available again tomorrow.';
 
     const handleRequestGame = async () => {
         if (isRequesting || isRequested) return;
@@ -176,7 +178,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
             await navigator.clipboard.writeText(rawLinks.join('\n'));
             setCopied(true);
             setTimeout(() => setCopied(false), 2500);
-        } catch (_) {}
+        } catch (_) { }
     };
 
     const nextScreenshot = () => {
@@ -316,6 +318,16 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                                 <div className="hub-status-text">
                                     <h4>1-Click Instant Download Ready</h4>
                                     <p>Direct download links ({directCount} parts) are verified in the cloud database. Download instantly with full multithreaded speed.</p>
+                                </div>
+                            </div>
+                        ) : databaseQuotaExceeded ? (
+                            <div className="hub-status-banner pending">
+                                <div className="hub-status-icon">
+                                    <AlertTriangle size={22} />
+                                </div>
+                                <div className="hub-status-text">
+                                    <h4>Cloud Database Quota Exceeded</h4>
+                                    <p>{databaseStatusMessage} You can still add this game to the priority queue and use the Local EXE Extractor now.</p>
                                 </div>
                             </div>
                         ) : isRequested ? (
@@ -537,7 +549,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
 
                             {!isResolved && (
                                 <a
-                                    href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/download/v1.0.1/FitGirl_Link_Extractor.exe"
+                                    href="https://github.com/GoldleoM/Fitgirl_Local_Link_Extractor/releases/latest/download/FitGirl_Link_Extractor.exe"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="hub-btn-secondary"

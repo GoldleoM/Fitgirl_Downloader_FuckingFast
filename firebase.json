@@ -11,6 +11,10 @@
     ],
     "rewrites": [
       {
+        "source": "maintenance.json",
+        "destination": "/maintenance.json"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
