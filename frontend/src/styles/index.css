@@ -1801,66 +1801,82 @@ body {
     box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
 }
 
-/* System Requirements Cards Grid */
-.reqs-section {
-    background: rgba(14, 20, 32, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+/* Official Steam/CYRI Style 2-Column System Requirements Board */
+.steam-specs-board {
+    background: #0d141e;
+    border: 1px solid rgba(56, 189, 248, 0.2);
     border-radius: var(--radius-md);
-    padding: 1.1rem 1.25rem;
+    padding: 1.25rem 1.4rem;
     margin-bottom: 1.4rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-.specs-tabs-switch {
-    display: flex;
-    align-items: center;
-    background: rgba(6, 9, 16, 0.8);
-    border: 1px solid var(--border-glass);
-    border-radius: var(--radius-pill);
-    padding: 3px;
-    gap: 3px;
+.steam-specs-header {
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1rem;
 }
 
-.spec-tab-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 0.74rem;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    transition: all var(--transition-fast);
+.steam-specs-title {
+    font-family: var(--font-heading);
+    font-size: 0.92rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    margin: 0;
 }
 
-.spec-tab-btn:hover {
-    color: #ffffff;
-}
-
-.spec-tab-btn.active {
-    background: var(--gradient-brand);
-    color: #ffffff;
-    box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
-}
-
-.hub-reqs-grid {
+.steam-specs-columns-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0.75rem;
-    margin-top: 0.85rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
 }
 
-.req-card {
-    background: rgba(6, 9, 16, 0.75);
-    border: 1px solid var(--border-glass);
-    border-radius: var(--radius-sm);
-    padding: 0.7rem 0.9rem;
+@media (max-width: 640px) {
+    .steam-specs-columns-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+}
+
+.steam-specs-col {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
 }
 
-.req-card.full-width {
-    grid-column: 1 / -1;
+.specs-col-heading {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+}
+
+.specs-entries-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.specs-entries-list li {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: #cbd5e1;
+}
+
+.specs-entries-list li strong {
+    color: #94a3b8;
+    font-weight: 600;
+    margin-right: 0.35rem;
+}
+
+.specs-entries-list li span {
+    color: #f1f5f9;
 }
 
 .req-card.highlight-gpu {
