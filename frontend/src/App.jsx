@@ -68,7 +68,7 @@ export default function App() {
         });
     }, []);
 
-    // 2. Pre-warm local catalog index (150 games) on mount
+    // 2. Pre-warm local catalog index (150 games) on mount & check for deep linked game
     useEffect(() => {
         let isMounted = true;
         const prewarm = async () => {
@@ -77,12 +77,62 @@ export default function App() {
                 const data = await res.json();
                 if (isMounted && data.success && data.results && data.results.length > 0) {
                     ingestGamesIntoIndex(data.results);
+                    
+                    // Check if URL has ?game=slug or ?game=title
+                    const params = new URLSearchParams(window.location.search);
+                    const gameQuery = params.get('game');
+                    if (gameQuery) {
+                        const target = data.results.find(g => (g.slug && g.slug.toLowerCase() === gameQuery.toLowerCase()) || (g.title && g.title.toLowerCase().includes(gameQuery.toLowerCase())));
+                        if (target) {
+                            setSelectedGameModal(target);
+                        } else {
+                            // Fetch via search
+                            const searchRes = await apiFetch(`/api/search?q=${encodeURIComponent(gameQuery)}`);
+                            const searchData = await searchRes.json();
+                            if (isMounted && searchData.success && searchData.results && searchData.results.length > 0) {
+                                setSelectedGameModal(searchData.results[0]);
+                            }
+                        }
+                    }
                 }
             } catch (_) {}
         };
         prewarm();
         return () => { isMounted = false; };
     }, [ingestGamesIntoIndex]);
+
+    // 2b. Sync URL & SEO Title with Selected Game Modal
+    useEffect(() => {
+        if (selectedGameModal) {
+            document.title = `${selectedGameModal.title} — PC Requirements, Overview & Download | FitBoy PRO`;
+            const currentUrl = new URL(window.location);
+            const gameParam = selectedGameModal.slug || encodeURIComponent(selectedGameModal.title);
+            if (currentUrl.searchParams.get('game') !== gameParam) {
+                currentUrl.searchParams.set('game', gameParam);
+                window.history.pushState({ game: gameParam }, '', currentUrl);
+            }
+        } else {
+            document.title = 'FitBoy PRO — PC Game Library, Game Search & Download Tools';
+            const currentUrl = new URL(window.location);
+            if (currentUrl.searchParams.has('game')) {
+                currentUrl.searchParams.delete('game');
+                window.history.pushState({}, '', currentUrl.pathname + (currentUrl.search ? currentUrl.search : ''));
+            }
+        }
+    }, [selectedGameModal]);
+
+    // 2c. Support browser back/forward history for game modals
+    useEffect(() => {
+        const handlePopState = () => {
+            const params = new URLSearchParams(window.location.search);
+            const gameQuery = params.get('game');
+            if (!gameQuery) {
+                setSelectedGameModal(null);
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     // 3. Filter evaluator
     const matchesFilters = useCallback((game) => {
