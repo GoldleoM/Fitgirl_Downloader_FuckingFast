@@ -26,7 +26,8 @@ import {
     Tag,
     Cpu,
     Flame,
-    Loader2
+    Loader2,
+    Monitor
 } from 'lucide-react';
 import { apiFetch, formatCoverUrl } from '../utils/api';
 
@@ -38,6 +39,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [isRequesting, setIsRequesting] = useState(false);
     const [requestSuccess, setRequestSuccess] = useState(false);
+    const [specTab, setSpecTab] = useState('minimum');
 
     useEffect(() => {
         if (!isOpen || !game) {
@@ -383,29 +385,87 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
                             </ul>
                         </div>
 
-                        {/* Repack & System Hardware Requirements */}
-                        {(requirements.ram || requirements.hdd || requirements.install_time) && (
+                        {/* Repack & System Hardware Requirements (GPU, CPU, RAM, Storage) */}
+                        {(requirements.ram || requirements.hdd || requirements.install_time || requirements.minimum || requirements.recommended) && (
                             <div className="hub-section reqs-section">
-                                <h4 className="hub-section-title">
-                                    <Cpu size={15} className="text-neon" />
-                                    <span>System &amp; Hardware Requirements</span>
-                                </h4>
+                                <div className="hub-section-header-row">
+                                    <h4 className="hub-section-title">
+                                        <Monitor size={15} className="text-neon" />
+                                        <span>PC &amp; Hardware System Requirements</span>
+                                    </h4>
+                                    {requirements.minimum && requirements.recommended && (
+                                        <div className="specs-tabs-switch">
+                                            <button
+                                                className={`spec-tab-btn ${specTab === 'minimum' ? 'active' : ''}`}
+                                                onClick={() => setSpecTab('minimum')}
+                                            >
+                                                Minimum Specs
+                                            </button>
+                                            <button
+                                                className={`spec-tab-btn ${specTab === 'recommended' ? 'active' : ''}`}
+                                                onClick={() => setSpecTab('recommended')}
+                                            >
+                                                Recommended Specs
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="hub-reqs-grid">
-                                    {requirements.ram && (
-                                        <div className="req-card">
-                                            <span className="req-label"><Zap size={12} className="text-cyan" /> Minimum Installer RAM</span>
-                                            <span className="req-val">{requirements.ram}</span>
+                                    {/* GPU Graphics Card */}
+                                    {((specTab === 'recommended' && requirements.recommended?.graphics) || requirements.minimum?.graphics) && (
+                                        <div className="req-card full-width highlight-gpu">
+                                            <span className="req-label"><Monitor size={12} className="text-cyan" /> Graphics Card (GPU)</span>
+                                            <span className="req-val text-white-glow">
+                                                {(specTab === 'recommended' && requirements.recommended?.graphics) || requirements.minimum?.graphics}
+                                            </span>
                                         </div>
                                     )}
-                                    {requirements.hdd && (
-                                        <div className="req-card">
-                                            <span className="req-label"><HardDrive size={12} className="text-purple" /> Storage Space After Install</span>
-                                            <span className="req-val">{requirements.hdd}</span>
-                                        </div>
-                                    )}
-                                    {requirements.install_time && (
+
+                                    {/* CPU Processor */}
+                                    {((specTab === 'recommended' && requirements.recommended?.processor) || requirements.minimum?.processor) && (
                                         <div className="req-card full-width">
-                                            <span className="req-label"><Clock size={12} className="text-amber" /> Estimated Installation Time</span>
+                                            <span className="req-label"><Cpu size={12} className="text-purple" /> Processor (CPU)</span>
+                                            <span className="req-val">
+                                                {(specTab === 'recommended' && requirements.recommended?.processor) || requirements.minimum?.processor}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* RAM Memory */}
+                                    {((specTab === 'recommended' && requirements.recommended?.memory) || requirements.minimum?.memory || requirements.ram) && (
+                                        <div className="req-card">
+                                            <span className="req-label"><Zap size={12} className="text-cyan" /> System RAM</span>
+                                            <span className="req-val">
+                                                {(specTab === 'recommended' && requirements.recommended?.memory) || requirements.minimum?.memory || requirements.ram}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Storage Space */}
+                                    {((specTab === 'recommended' && requirements.recommended?.storage) || requirements.minimum?.storage || requirements.hdd) && (
+                                        <div className="req-card">
+                                            <span className="req-label"><HardDrive size={12} className="text-purple" /> Storage Space</span>
+                                            <span className="req-val">
+                                                {(specTab === 'recommended' && requirements.recommended?.storage) || requirements.minimum?.storage || requirements.hdd}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* OS */}
+                                    {((specTab === 'recommended' && requirements.recommended?.os) || requirements.minimum?.os) && (
+                                        <div className="req-card">
+                                            <span className="req-label"><ShieldCheck size={12} style={{ color: 'var(--neon-emerald)' }} /> Operating System</span>
+                                            <span className="req-val">
+                                                {(specTab === 'recommended' && requirements.recommended?.os) || requirements.minimum?.os}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Installation Time */}
+                                    {requirements.install_time && (
+                                        <div className="req-card">
+                                            <span className="req-label"><Clock size={12} className="text-amber" /> Repack Install Time</span>
                                             <span className="req-val">{requirements.install_time}</span>
                                         </div>
                                     )}

@@ -466,7 +466,7 @@ def get_game_details(game_url):
                 if desc_paras:
                     description = '\n\n'.join(desc_paras)
 
-        # 7. Extract System Requirements (RAM, HDD space, Install time)
+        # 7. Extract System Requirements (RAM, HDD space, Install time, GPU, CPU from PC specs)
         reqs = {}
         m_ram = re.search(r'At least\s*([0-9]+\s*GB[^,\n\r]+RAM[^\.\n\r]*)', full_text, re.I)
         if m_ram:
@@ -477,6 +477,44 @@ def get_game_details(game_url):
         m_time = re.search(r'Installation takes\s*([^\.\n\r]+)', full_text, re.I)
         if m_time:
             reqs['install_time'] = m_time.group(1).strip()
+
+        # Query Official PC System Specs (GPU, CPU, DirectX, OS) via Steam Store API
+        try:
+            clean_name = re.sub(r'\(.*?\)|\[.*?\]|v\d+.*|Digital Deluxe.*|Ultimate Edition.*|\+.*|Repack.*|#\d+.*', '', title).strip()
+            if clean_name:
+                st_res = scraper.get(f"https://store.steampowered.com/api/storesearch/?term={urllib.parse.quote(clean_name)}&l=english&cc=US", timeout=4)
+                if st_res.status_code == 200:
+                    st_data = st_res.json()
+                    items = st_data.get('items', [])
+                    if items:
+                        app_id = items[0]['id']
+                        d_res = scraper.get(f"https://store.steampowered.com/api/appdetails?appids={app_id}&l=english", timeout=4)
+                        if d_res.status_code == 200:
+                            app_details = d_res.json().get(str(app_id), {}).get('data', {})
+                            pc_reqs = app_details.get('pc_requirements', {})
+                            if isinstance(pc_reqs, dict):
+                                def parse_pc_spec(html_str):
+                                    if not html_str: return {}
+                                    sp = BeautifulSoup(html_str, 'html.parser')
+                                    specs = {}
+                                    for li in sp.find_all('li'):
+                                        t = li.get_text().strip()
+                                        if ':' in t:
+                                            k, v = t.split(':', 1)
+                                            specs[k.strip().lower()] = v.strip()
+                                    if not specs:
+                                        t = sp.get_text()
+                                        for k in ['graphics', 'processor', 'memory', 'os', 'directx', 'storage']:
+                                            m = re.search(rf'{k}\s*:\s*([^\n\r<]+)', t, re.I)
+                                            if m: specs[k] = m.group(1).strip()
+                                    return specs
+                                    
+                                min_specs = parse_pc_spec(pc_reqs.get('minimum', ''))
+                                rec_specs = parse_pc_spec(pc_reqs.get('recommended', ''))
+                                if min_specs: reqs['minimum'] = min_specs
+                                if rec_specs: reqs['recommended'] = rec_specs
+        except Exception as e:
+            pass
 
         # 8. Extract FuckingFast links across entire document (including spoiler accordions)
         fuckingfast_links = []
