@@ -38,14 +38,14 @@ export default function App() {
                     return;
                 }
                 const data = await res.json();
-                if (mounted && data.active) {
+                if (mounted && data && data.active === true) {
                     const endTime = new Date(data.end_time).getTime();
                     const now = Date.now();
                     if (endTime > now) {
                         setMaintenanceActive(true);
                     } else {
-                        // Expired - reload to clear
-                        window.location.reload();
+                        // Expired - clear maintenance
+                        setMaintenanceActive(false);
                     }
                 } else if (mounted) {
                     setMaintenanceActive(false);
