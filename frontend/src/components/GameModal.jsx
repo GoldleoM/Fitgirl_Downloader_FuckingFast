@@ -63,7 +63,9 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
             (game.title && g.title.toLowerCase() === game.title.toLowerCase())
         );
         if (cached) {
-            setFullGameData(cached);
+            setFullGameData({ ...cached, ...game });
+        } else {
+            setFullGameData(game);
         }
 
         let isMounted = true;
@@ -118,9 +120,9 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     if (!isOpen || !game) return null;
 
     const activeGame = fullGameData || game;
-    const isResolved = activeGame.resolved;
     const directLinks = activeGame.direct_links || [];
     const directCount = directLinks.length || activeGame.direct_links_count || 0;
+    const isResolved = Boolean(activeGame.resolved || directCount > 0);
     const rawLinks = activeGame.fuckingfast_links || [];
     const partsCount = activeGame.parts_count || rawLinks.length || directCount;
     const repackSize = activeGame.repack_size || 'Repack';
