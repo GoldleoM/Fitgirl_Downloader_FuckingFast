@@ -86,6 +86,7 @@ export default function App() {
     const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
     const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(-1);
     const suggestDebounceRef = useRef(null);
+    const preloadedSlugsRef = useRef(new Set());
 
     // Filter State
     const [filters, setFilters] = useState({
@@ -452,7 +453,7 @@ export default function App() {
         return catalogGames;
     }, [isSearching, searchResults, isAnyFilterActive, allFilteredGames, filterPage, catalogGames]);
 
-    // 6. Preload / Fetch full game details, screenshots & specs for all games on the active page (and unload on page change)
+    // 6. Preload / Fetch live status, direct links & specs for all games on active page (1 request per game max)
     useEffect(() => {
         if (!displayedGames || displayedGames.length === 0) return;
 
@@ -460,10 +461,13 @@ export default function App() {
         const { signal } = controller;
 
         displayedGames.forEach(game => {
-            // If already enriched with full description, screenshots & Steam specs, skip
-            if (game.description && game.screenshots?.length > 0 && game.requirements?.minimum?.graphics) {
+            const id = game.slug || game.url;
+            if (!id || preloadedSlugsRef.current.has(id)) {
                 return;
             }
+
+            // Mark this game as requested so it NEVER repeats in this session
+            preloadedSlugsRef.current.add(id);
 
             const param = game.slug ? `slug=${encodeURIComponent(game.slug)}` : (game.url ? `url=${encodeURIComponent(game.url)}` : '');
             if (!param) return;
@@ -474,6 +478,7 @@ export default function App() {
                     if (!signal.aborted && data.success && data.game) {
                         ingestGamesIntoIndex([data.game]);
                         setCatalogGames(prev => prev.map(g => (g.slug === data.game.slug || g.url === data.game.url) ? { ...g, ...data.game } : g));
+                        setSearchResults(prev => prev.map(g => (g.slug === data.game.slug || g.url === data.game.url) ? { ...g, ...data.game } : g));
                     }
                 })
                 .catch(() => {});
