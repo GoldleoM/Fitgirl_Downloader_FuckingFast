@@ -63,8 +63,11 @@ def _save_maintenance_state(state):
         print(f"[Maintenance] Error saving state: {e}")
 
 def is_maintenance_active():
-    """Check if maintenance mode is currently active."""
-    state = _load_maintenance_state()
+    """Check if maintenance mode is currently active (checks Firestore first, falls back to local)."""
+    state = firestore_db.get_maintenance_state()
+    if not state:
+        state = _load_maintenance_state()
+        
     if not state.get('active'):
         return False, {}
     
@@ -73,11 +76,13 @@ def is_maintenance_active():
         if datetime.utcnow() >= end_time:
             # Expired - auto-disable
             state['active'] = False
+            firestore_db.set_maintenance_state(state)
             _save_maintenance_state(state)
             return False, {}
         return True, state
     except Exception:
         return False, {}
+
 
 
 def _normalized_url_set(urls):
@@ -688,11 +693,10 @@ def api_request_game():
             details = fitgirl_scraper.get_game_details(game_url)
             if details and details.get('fuckingfast_links'):
                 details['slug'] = game_slug
-                details['resolved'] = False
-                details['direct_links'] = []
                 firestore_db.upsert_game(details)
         except Exception as e:
             print(f"[RequestGame] Error scraping details for {game_url}: {e}")
+
 
     result = firestore_db.request_game(game_slug, title=game_title, url=game_url)
     return jsonify({

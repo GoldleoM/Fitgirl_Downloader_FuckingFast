@@ -36,6 +36,7 @@ firebase-key.json
 
 # Databases & Local state
 games_db.json
+resolution_queue.json
 *.sqlite
 *.db
 

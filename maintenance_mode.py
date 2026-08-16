@@ -25,10 +25,55 @@ def load_config():
     return {}
 
 
+import tempfile
+import firestore_db
+
+TMP_MAINTENANCE_FILE = Path(tempfile.gettempdir()) / "maintenance_state.json"
+
+
+def clear_config():
+    inactive_config = {
+        "active": False,
+        "stopped_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    }
+    
+    # 1. Update Firestore cloud database (real-time for all connected web clients)
+    try:
+        firestore_db.set_maintenance_state(inactive_config)
+    except Exception as fe:
+        print(f"[Firestore] Could not sync maintenance state: {fe}")
+
+    # 2. Write inactive state explicitly to local and frontend files
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(inactive_config, f, indent=2)
+        
+    FRONTEND_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(FRONTEND_CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(inactive_config, f, indent=2)
+        
+    dist_file = Path(__file__).parent / "frontend" / "dist" / "maintenance.json"
+    if dist_file.parent.exists():
+        with open(dist_file, 'w', encoding='utf-8') as f:
+            json.dump(inactive_config, f, indent=2)
+
+    # 3. Update server.py backend maintenance state
+    try:
+        with open(TMP_MAINTENANCE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(inactive_config, f, indent=2)
+    except Exception:
+        pass
+
+
 def save_config(config):
+    # 1. Update Firestore cloud database
+    try:
+        firestore_db.set_maintenance_state(config)
+    except Exception as fe:
+        print(f"[Firestore] Could not sync maintenance state: {fe}")
+
+    # 2. Update local files
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
-    # Also write to frontend public folder for the React app to read
     FRONTEND_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(FRONTEND_CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
@@ -38,14 +83,6 @@ def save_config(config):
             json.dump(config, f, indent=2)
 
 
-def clear_config():
-    if CONFIG_FILE.exists():
-        CONFIG_FILE.unlink()
-    if FRONTEND_CONFIG_FILE.exists():
-        FRONTEND_CONFIG_FILE.unlink()
-    dist_file = Path(__file__).parent / "frontend" / "dist" / "maintenance.json"
-    if dist_file.exists():
-        dist_file.unlink()
 
 
 def start_maintenance(hours=None, message=None):

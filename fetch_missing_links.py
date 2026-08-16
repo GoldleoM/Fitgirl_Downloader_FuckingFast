@@ -384,6 +384,32 @@ class HighSpeedGameResolver:
         return ordered_direct_links
 
 
+def pull_queue(limit: Optional[int] = None, priority_only: bool = False, file_path: Optional[str] = None):
+    log.info("📥 Pulling unresolved & priority games from Firestore into local queue...")
+    count = firestore_db.save_resolution_queue_locally(file_path=file_path, limit=limit, priority_only=priority_only)
+    target = file_path or firestore_db.QUEUE_FILE
+    log.success(f"💾 Successfully saved {count} game(s) to '{os.path.basename(target)}'!")
+    log.info(f"💡 You can now resolve links locally using: python fetch_missing_links.py --local")
+    return count
+
+
+def push_queue(file_path: Optional[str] = None):
+    target = file_path or firestore_db.QUEUE_FILE
+    log.info(f"📤 Reading resolved games from local queue '{os.path.basename(target)}'...")
+    games = firestore_db.load_resolution_queue_locally(file_path=target)
+    
+    # Filter games that have resolved direct links
+    resolved_games = [g for g in games if g.get('direct_links') and len(g['direct_links']) > 0]
+    
+    if not resolved_games:
+        log.warning("No resolved games with direct links found in local queue to push.")
+        return
+        
+    log.info(f"🚀 Batch updating {len(resolved_games)} game(s) in Firestore...")
+    stats = firestore_db.batch_update_game_links(resolved_games)
+    log.success(f"🏁 Batch Push Complete! Updated: {stats['updated']} | Failed: {stats['failed']}")
+
+
 def run_crawler(
     limit: Optional[int] = None,
     slug: Optional[str] = None,
@@ -391,73 +417,70 @@ def run_crawler(
     concurrency: int = 1,
     delay: float = 1.2,
     cooldown: float = 60.0,
-    visible: bool = False
+    visible: bool = False,
+    local_mode: bool = False,
+    batch_sync: bool = False,
+    queue_file: Optional[str] = None
 ):
     log.clear()
     log.info("🔥 ===================================================================")
     log.info("🚀 FITGIRL SAFE LINK RESOLVER (RATE-LIMIT IMMUNE)")
     log.info("🔥 ===================================================================")
 
-    db = firestore_db.init_firestore()
-    if not firestore_db.is_firestore_connected():
-        log.warning("Firestore not connected. Will read/write to local games_db.json fallback.")
+    if batch_sync:
+        pull_queue(limit=limit, priority_only=priority_only, file_path=queue_file)
+        local_mode = True
 
     games_to_resolve = []
 
     if slug:
-        game = firestore_db.get_game_by_slug(slug)
-        if not game:
-            log.error(f"Game with slug '{slug}' not found in database.")
-            return
-        if game.get('resolved') and game.get('direct_links') and len(game.get('direct_links', [])) >= len(game.get('fuckingfast_links', [])):
-            log.info(f"Game '{game.get('title')}' is already 100% resolved with {len(game['direct_links'])} links.")
-        games_to_resolve = [game]
+        if local_mode:
+            all_local = firestore_db.load_resolution_queue_locally(file_path=queue_file)
+            games_to_resolve = [g for g in all_local if g.get('slug') == slug]
+        else:
+            game = firestore_db.get_game_by_slug(slug)
+            if not game:
+                log.error(f"Game with slug '{slug}' not found in database.")
+                return
+            if game.get('resolved') and game.get('direct_links') and len(game.get('direct_links', [])) >= len(game.get('fuckingfast_links', [])):
+                log.info(f"Game '{game.get('title')}' is already 100% resolved with {len(game['direct_links'])} links.")
+            games_to_resolve = [game]
+    elif local_mode:
+        log.info("📂 LOCAL MODE: Reading resolution queue from local JSON file...")
+        games_to_resolve = firestore_db.load_resolution_queue_locally(file_path=queue_file)
+        if priority_only:
+            games_to_resolve = [g for g in games_to_resolve if g.get('_is_priority')]
+        if limit:
+            games_to_resolve = games_to_resolve[:limit]
     else:
-        # 1. First, check the High-Priority Request Queue
-        priority_games = firestore_db.get_priority_requested_games(limit=limit)
+        # Fetch all priority-requested and unresolved games in a SINGLE read pass from Firestore
+        games_to_resolve = firestore_db.get_resolution_queue(limit=limit, priority_only=priority_only)
         
-        if priority_games:
-            log.info(f"🎯 PRIORITY QUEUE ACTIVE: Found {len(priority_games)} user-requested game(s) awaiting links!")
-            for idx, pg in enumerate(priority_games, 1):
-                req_count = pg.get('request_count', 1)
-                log.info(f"   {idx}. ⚡ {pg.get('title', 'Unknown')} ({req_count} request{'s' if req_count != 1 else ''})")
-            
-            for g in priority_games:
-                g['_is_priority'] = True
-            games_to_resolve.extend(priority_games)
-
-        # 2. If priority_only is NOT set, fill the remaining queue with standard unresolved games
-        if not priority_only:
-            remaining_limit = None
-            if limit:
-                remaining_limit = max(0, limit - len(games_to_resolve))
-                if remaining_limit == 0:
-                    pass  # Limit reached with priority games alone
-
-            if remaining_limit is None or remaining_limit > 0:
-                priority_slugs = {g.get('slug') for g in games_to_resolve if g.get('slug')}
-                normal_unresolved = firestore_db.get_unresolved_games(limit=remaining_limit, exclude_slugs=priority_slugs)
-                if not priority_games and normal_unresolved:
-                    log.info("🎯 Priority request queue is empty. Reading standard un-cached games from catalog...")
-                for g in normal_unresolved:
-                    g['_is_priority'] = False
-                games_to_resolve.extend(normal_unresolved)
+    priority_games = [g for g in games_to_resolve if g.get('_is_priority')]
+    if priority_games:
+        log.info(f"🎯 PRIORITY QUEUE ACTIVE: Found {len(priority_games)} user-requested game(s) awaiting links!")
+        for idx, pg in enumerate(priority_games, 1):
+            req_count = pg.get('request_count', 1)
+            log.info(f"   {idx}. ⚡ {pg.get('title', 'Unknown')} ({req_count} request{'s' if req_count != 1 else ''})")
+    elif not priority_only and games_to_resolve:
+        log.info("🎯 Reading games from catalog...")
 
     if not games_to_resolve:
         if priority_only:
             log.success("🎉 Priority request queue is empty! No requested games waiting for links.")
         else:
-            log.success("🎉 All games in the database already have direct download links! Nothing to resolve.")
+            log.success("🎉 All games in the queue already have direct download links! Nothing to resolve.")
         return
 
     total_games = len(games_to_resolve)
     priority_count = sum(1 for g in games_to_resolve if g.get('_is_priority'))
     total_parts_all = sum(len(g.get('fuckingfast_links', [])) for g in games_to_resolve)
     
+    mode_banner = " [LOCAL OFFLINE QUEUE]" if local_mode else " [LIVE FIRESTORE]"
     if priority_count > 0:
-        log.info(f"📋 Total Resolution Queue: {total_games} games ({priority_count} PRIORITY REQUESTS, {total_games - priority_count} standard | {total_parts_all} total parts)")
+        log.info(f"📋 Total Resolution Queue{mode_banner}: {total_games} games ({priority_count} PRIORITY REQUESTS, {total_games - priority_count} standard | {total_parts_all} total parts)")
     else:
-        log.info(f"📋 Total Resolution Queue: {total_games} unresolved/partial games ({total_parts_all} total parts)")
+        log.info(f"📋 Total Resolution Queue{mode_banner}: {total_games} unresolved/partial games ({total_parts_all} total parts)")
     log.info(f"Safe Config: Concurrency={concurrency} Tab(s) | Pace={delay}s Delay | Auto-Cooldown={cooldown}s")
 
     resolver = HighSpeedGameResolver(
@@ -484,6 +507,21 @@ def run_crawler(
             req_count = game.get('request_count', 1)
 
             if not raw_links:
+                game_url = game.get('url')
+                if game_url:
+                    log.info(f"[{idx}/{total_games}] Fetching FitGirl page for raw links ->", game_url)
+                    try:
+                        import fitgirl_scraper
+                        details = fitgirl_scraper.get_game_details(game_url)
+                        if details and details.get('fuckingfast_links'):
+                            raw_links = details['fuckingfast_links']
+                            game['fuckingfast_links'] = raw_links
+                            game['parts_count'] = len(raw_links)
+                            firestore_db.upsert_game({**game, 'fuckingfast_links': raw_links})
+                    except Exception as fe:
+                        log.warning(f"Could not auto-fetch raw links for '{title}': {fe}")
+                        
+            if not raw_links:
                 log.warning(f"[{idx}/{total_games}] Skipping '{title}'", "No links found in doc.")
                 continue
 
@@ -500,12 +538,26 @@ def run_crawler(
             direct_links = resolver.resolve_game(raw_links, game_title=title, existing_direct_links=existing_dl)
 
             if direct_links and len(direct_links) == total_parts:
-                firestore_db.update_game_links(game_slug, direct_links, total_parts=total_parts)
                 resolved_count += 1
-                log.success(f"💾 Updated '{title}' in Firestore ({len(direct_links)}/{total_parts} direct parts active)!\n")
+                game['resolved'] = True
+                game['direct_links'] = direct_links
+                game['requested'] = False
+                game['_is_priority'] = False
+                game.pop('requested_at', None)
+                game.pop('request_count', None)
+                if local_mode:
+                    firestore_db.update_local_queue_game(game_slug, direct_links, total_parts=total_parts, file_path=queue_file)
+                    log.success(f"💾 Saved to local queue ({len(direct_links)}/{total_parts} direct parts active)!\n")
+                else:
+                    firestore_db.update_game_links(game_slug, direct_links, total_parts=total_parts)
+                    log.success(f"💾 Updated '{title}' in Firestore ({len(direct_links)}/{total_parts} direct parts active)!\n")
             elif direct_links:
-                firestore_db.update_game_links(game_slug, direct_links, total_parts=total_parts)
-                log.warning(f"💾 Saved progress for '{title}' in Firestore ({len(direct_links)}/{total_parts} parts)!\n")
+                if local_mode:
+                    firestore_db.update_local_queue_game(game_slug, direct_links, total_parts=total_parts, file_path=queue_file)
+                    log.warning(f"💾 Saved partial progress to local queue ({len(direct_links)}/{total_parts} parts)!\n")
+                else:
+                    firestore_db.update_game_links(game_slug, direct_links, total_parts=total_parts)
+                    log.warning(f"💾 Saved progress for '{title}' in Firestore ({len(direct_links)}/{total_parts} parts)!\n")
             else:
                 if resolver.rate_limited:
                     log.warning(f"⚠️ Halting processing on '{title}' due to rate limit.\n")
@@ -515,20 +567,32 @@ def run_crawler(
 
             time.sleep(1.5 + random.uniform(0.3, 0.8))
 
-    except KeyboardInterrupt:
-        log.warning("\n[STOPPED] Crawler interrupted by user.")
+    except (KeyboardInterrupt, SystemExit):
+        log.warning("\n🛑 [STOPPED] Crawler interrupted by user / signal.")
+        resolver.stop_event.set()
+    except Exception as e:
+        log.error(f"❌ Unexpected error in crawler: {e}")
     finally:
         resolver.stop()
+        
+        # If running batch-sync, ensure all newly resolved games in local queue are pushed to Firestore on exit
+        if batch_sync:
+            log.info("📤 Script stopping: Auto-syncing all resolved games from local queue to Firestore...")
+            try:
+                push_queue(file_path=queue_file)
+            except Exception as pe:
+                log.error(f"Failed to auto-push queue to Firestore on exit: {pe}")
 
     total_elapsed = time.time() - start_all
     log.info("=" * 65)
     if resolver.rate_limited:
         log.warning(f"🛑 STOPPED: [{resolver.rate_limit_source}]")
-        log.success(f"💾 All progress is safely saved in Firestore ({resolved_count}/{total_games} games resolved in {total_elapsed:.1f}s).")
-        log.info("💡 Run `python fetch_missing_links.py` to resume whenever you wish!")
+        location = "local queue" if local_mode else "Firestore"
+        log.success(f"💾 All progress is safely saved in {location} ({resolved_count}/{total_games} games resolved in {total_elapsed:.1f}s).")
     else:
         log.success(f"🏁 RESOLUTION COMPLETE! Successfully processed {resolved_count}/{total_games} games in {total_elapsed:.1f}s.")
     log.info("=" * 65)
+
 
 
 if __name__ == "__main__":
@@ -540,14 +604,31 @@ if __name__ == "__main__":
     parser.add_argument("--delay", type=float, default=1.2, help="Safe delay between requests in seconds (default: 1.2s)")
     parser.add_argument("--cooldown", type=float, default=60.0, help="Cooldown sleep in seconds when rate limited (default: 60.0s)")
     parser.add_argument("--visible", action="store_true", help="Show browser window for debugging")
+    
+    # Local batching commands & flags
+    parser.add_argument("--pull", action="store_true", help="Pull unresolved and priority games from Firestore into local resolution_queue.json and exit")
+    parser.add_argument("--push", action="store_true", help="Push all resolved games from local resolution_queue.json to Firestore in batch and exit")
+    parser.add_argument("--local", action="store_true", help="Run link resolution completely offline using local resolution_queue.json")
+    parser.add_argument("--batch-sync", action="store_true", help="Full workflow: Pull once -> resolve locally -> push all together in batch")
+    parser.add_argument("--queue-file", type=str, default=None, help="Custom path for local resolution queue JSON file")
+    
     args = parser.parse_args()
 
-    run_crawler(
-        limit=args.limit,
-        slug=args.slug,
-        priority_only=args.priority_only,
-        concurrency=args.concurrency,
-        delay=args.delay,
-        cooldown=args.cooldown,
-        visible=args.visible
-    )
+    if args.pull:
+        pull_queue(limit=args.limit, priority_only=args.priority_only, file_path=args.queue_file)
+    elif args.push:
+        push_queue(file_path=args.queue_file)
+    else:
+        run_crawler(
+            limit=args.limit,
+            slug=args.slug,
+            priority_only=args.priority_only,
+            concurrency=args.concurrency,
+            delay=args.delay,
+            cooldown=args.cooldown,
+            visible=args.visible,
+            local_mode=args.local,
+            batch_sync=args.batch_sync,
+            queue_file=args.queue_file
+        )
+
