@@ -44,6 +44,8 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
     const [requestSuccess, setRequestSuccess] = useState(false);
     const [specTab, setSpecTab] = useState('minimum');
 
+    const gameId = game ? (game.slug || game.url) : null;
+
     useEffect(() => {
         if (!isOpen || !game) {
             setFullGameData(null);
@@ -100,7 +102,7 @@ export default function GameModal({ isOpen, game, onClose, onStartDownload, onGa
 
         fetchDetails();
         return () => { isMounted = false; };
-    }, [isOpen, game]);
+    }, [isOpen, gameId]);
 
     // Handle Escape key to close modal
     useEffect(() => {
