@@ -23,17 +23,14 @@ export default function App() {
     // Maintenance mode state
     const [maintenanceActive, setMaintenanceActive] = useState(false);
     
-    // Check maintenance status on mount
+    // Check maintenance status once on mount
     useEffect(() => {
         let mounted = true;
-        let intervalId = null;
         
         const checkMaintenance = async () => {
             try {
-                // Fetch from static JSON file (works on Firebase Hosting)
                 const res = await fetch('/maintenance.json', { cache: 'no-store' });
                 if (!res.ok) {
-                    // No maintenance file = no maintenance
                     if (mounted) setMaintenanceActive(false);
                     return;
                 }
@@ -44,27 +41,18 @@ export default function App() {
                     if (endTime > now) {
                         setMaintenanceActive(true);
                     } else {
-                        // Expired - clear maintenance
                         setMaintenanceActive(false);
                     }
                 } else if (mounted) {
                     setMaintenanceActive(false);
                 }
-            } catch (e) {
-                console.error('Maintenance check failed:', e);
+            } catch (_) {
                 if (mounted) setMaintenanceActive(false);
             }
         };
         
         checkMaintenance();
-        
-        // Re-check every 30 seconds in case maintenance was started while page open
-        intervalId = setInterval(checkMaintenance, 30000);
-        
-        return () => {
-            mounted = false;
-            if (intervalId) clearInterval(intervalId);
-        };
+        return () => { mounted = false; };
     }, []);
 
 
