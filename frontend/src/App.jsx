@@ -457,9 +457,6 @@ export default function App() {
     useEffect(() => {
         if (!displayedGames || displayedGames.length === 0) return;
 
-        const controller = new AbortController();
-        const { signal } = controller;
-
         displayedGames.forEach(game => {
             const id = game.slug || game.url;
             if (!id || preloadedSlugsRef.current.has(id)) {
@@ -472,22 +469,19 @@ export default function App() {
             const param = game.slug ? `slug=${encodeURIComponent(game.slug)}` : (game.url ? `url=${encodeURIComponent(game.url)}` : '');
             if (!param) return;
 
-            apiFetch(`/api/game?${param}`, { signal })
+            apiFetch(`/api/game?${param}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (!signal.aborted && data.success && data.game) {
+                    if (data && data.success && data.game) {
                         ingestGamesIntoIndex([data.game]);
                         setCatalogGames(prev => prev.map(g => (g.slug === data.game.slug || g.url === data.game.url) ? { ...g, ...data.game } : g));
                         setSearchResults(prev => prev.map(g => (g.slug === data.game.slug || g.url === data.game.url) ? { ...g, ...data.game } : g));
                     }
                 })
-                .catch(() => {});
+                .catch(() => {
+                    preloadedSlugsRef.current.delete(id);
+                });
         });
-
-        // Abort pending requests when page changes
-        return () => {
-            controller.abort();
-        };
     }, [displayedGames, ingestGamesIntoIndex]);
 
     const activeCurrentPage = isAnyFilterActive ? filterPage : currentPage;
